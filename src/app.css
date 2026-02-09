@@ -1,0 +1,992 @@
+@import 'tailwindcss';
+
+/* Tailwind v4: use .dark class on html for theme toggle (not just prefers-color-scheme) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Inter', system-ui, ui-sans-serif, sans-serif;
+}
+
+/* Base: refined neutral backgrounds, darker dark mode */
+html {
+  @apply antialiased;
+}
+body {
+  @apply min-h-screen text-zinc-800 dark:text-zinc-200;
+  background-color: #fafafa;
+}
+.dark body {
+  background-color: #0d0d0d;
+}
+/* Monospace for metrics */
+.font-mono {
+  font-feature-settings: "tnum";
+}
+
+/* Markdown content in message bubbles */
+.prose-chat h1 { @apply text-xl font-bold mt-4 mb-2; }
+.prose-chat h2 { @apply text-lg font-semibold mt-3 mb-2; }
+.prose-chat h3 { @apply text-base font-semibold mt-2 mb-1; }
+.prose-chat p { @apply my-2; }
+.prose-chat ul { @apply list-disc pl-6 my-2; }
+.prose-chat ol { @apply list-decimal pl-6 my-2; }
+.prose-chat pre { @apply rounded-lg p-3 my-2 overflow-x-auto text-sm; }
+.prose-chat code { @apply rounded px-1.5 py-0.5 text-sm; }
+.prose-chat pre code { @apply p-0 bg-transparent; }
+.prose-chat blockquote { @apply border-l-4 border-zinc-300 dark:border-zinc-600 pl-4 my-2 italic; }
+.prose-chat a { @apply text-blue-600 dark:text-blue-400 underline; }
+
+/* Accent: American flag red with contrasting bright orbit colors */
+:root {
+  --atom-accent: #B22234;
+  --atom-accent-light: #E03c51;
+  --atom-teal: #06b6d4;
+  --atom-amber: #f59e0b;
+}
+.dark {
+  --atom-accent: #DC143C;
+  --atom-accent-light: #E03c51;
+  --atom-teal: #22d3ee;
+  --atom-amber: #fbbf24;
+}
+
+/* Thinking indicator: pulsing atom with bright offsetting colors */
+@keyframes atom-nucleus-pulse {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+@keyframes atom-orbit-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes atom-orbit-spin-60 {
+  from { transform: rotate(60deg); }
+  to { transform: rotate(420deg); }
+}
+@keyframes atom-orbit-spin-120 {
+  from { transform: rotate(120deg); }
+  to { transform: rotate(480deg); }
+}
+.thinking-atom-icon {
+  display: block;
+}
+.thinking-atom-nucleus {
+  fill: var(--atom-accent);
+  transform-origin: 16px 16px;
+  animation: atom-nucleus-pulse 1.2s ease-in-out infinite;
+}
+.thinking-atom-orbit,
+.thinking-atom-orbit-2,
+.thinking-atom-orbit-3 {
+  transform-origin: 16px 16px;
+}
+.thinking-atom-orbit {
+  stroke: var(--atom-accent-light);
+  animation: atom-orbit-spin 4s linear infinite;
+}
+.thinking-atom-orbit-2 {
+  stroke: var(--atom-teal);
+  animation: atom-orbit-spin-60 5s linear infinite;
+}
+.thinking-atom-orbit-3 {
+  stroke: var(--atom-amber);
+  animation: atom-orbit-spin-120 6s linear infinite;
+}
+
+/* Max tokens: hide native spinner so only double/half buttons are used */
+.max-tokens-step-input::-webkit-inner-spin-button,
+.max-tokens-step-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.max-tokens-step-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.batch-size-step-input::-webkit-inner-spin-button,
+.batch-size-step-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.batch-size-step-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Micro-animations (subtle system feedback) */
+@keyframes ui-input-breathe {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(0,0,0,0); }
+  50% { transform: scale(1.008); box-shadow: 0 0 18px rgba(220, 38, 38, 0.08); }
+}
+.ui-input-breathe {
+  animation: ui-input-breathe 3.6s ease-in-out infinite;
+}
+
+@keyframes ui-odometer-scan {
+  0% { background-position-y: 0; }
+  100% { background-position-y: 6px; }
+}
+.ui-odometer {
+  position: relative;
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.ui-odometer-active::after {
+  content: '';
+  position: absolute;
+  inset: -2px -3px;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(220, 38, 38, 0.25) 0,
+    rgba(220, 38, 38, 0.25) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  opacity: 0.35;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  animation: ui-odometer-scan 0.8s linear infinite;
+}
+
+@keyframes ui-gpu-pulse {
+  0% { transform: translateX(-120%); opacity: 0.25; }
+  50% { opacity: 0.85; }
+  100% { transform: translateX(220%); opacity: 0.25; }
+}
+/* Sparkline for tokens/sec */
+.ui-sparkline {
+  display: block;
+}
+.ui-sparkline-line {
+  stroke: rgba(148, 163, 184, 0.6);
+  stroke-width: 1.2;
+}
+.ui-sparkline-active {
+  stroke: rgba(220, 38, 38, 0.9);
+}
+
+/* Command palette (Ctrl+K): backdrop blur + scale-in */
+@keyframes command-palette-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.command-palette-backdrop {
+  background: rgba(0, 0, 0, 0.4);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.command-palette-modal {
+  animation: command-palette-in 0.2s ease-out;
+}
+
+/* Message entrance: subtle fade + slide */
+@keyframes message-entrance {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.message-entrance {
+  animation: message-entrance 0.25s ease-out;
+}
+
+/* Cockpit Intel panel: slide in from right */
+@keyframes intel-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.intel-panel-enter {
+  animation: intel-panel-in 0.2s ease-out;
+}
+
+/* Convo rail width transition is inline (transition-[width] duration-200) */
+
+/* User bubble: theme-tinted, translucent */
+.ui-user-bubble {
+  background-color: var(--ui-accent);
+  background-color: color-mix(in srgb, var(--ui-accent) 20%, transparent);
+  color: var(--ui-text-primary);
+  border: 1px solid var(--ui-accent);
+  border-color: color-mix(in srgb, var(--ui-accent) 35%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-input-breathe,
+  .ui-odometer-active::after,
+  .ui-gpu-meter-active::after,
+  [data-ui-theme="radioactivelab"] .ui-btn-accent,
+  [data-ui-theme="radioactivelab"] .ui-sidebar-active,
+  [data-ui-theme="toxicwaste"] .ui-btn-accent {
+    animation: none !important;
+  }
+}
+
+/* ========== UI theme variables (data-ui-theme on root) ========== */
+[data-ui-theme="default"] {
+  --ui-bg-main: #fafafa;
+  --ui-bg-sidebar: rgba(255,255,255,0.8);
+  --ui-accent: #B22234;
+  --ui-accent-hot: #dc2626;
+  --ui-text-primary: #18181b;
+  --ui-text-secondary: #71717a;
+  --ui-border: rgba(0,0,0,0.08);
+  --ui-sidebar-active: #f4f4f5;
+  --ui-sidebar-hover: #fafafa;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #e4e4e7;
+  --ui-glow: rgba(178, 34, 52, 0.25);
+}
+.dark[data-ui-theme="default"] {
+  --ui-bg-main: #0d0d0d;
+  --ui-bg-sidebar: rgba(24,24,27,0.9);
+  --ui-accent: #E03c51;
+  --ui-accent-hot: #f87171;
+  --ui-text-primary: #fafafa;
+  --ui-text-secondary: #a1a1aa;
+  --ui-border: rgba(255,255,255,0.1);
+  --ui-sidebar-active: rgba(63,63,70,0.8);
+  --ui-sidebar-hover: rgba(39,39,42,0.8);
+  --ui-input-bg: #27272a;
+  --ui-input-border: #52525b;
+  --ui-glow: rgba(224, 60, 81, 0.3);
+}
+
+/* Option 1: Cyberpunk Terminal */
+[data-ui-theme="cyberpunk"] {
+  --ui-bg-main: #0a0e27;
+  --ui-bg-sidebar: #0d1117;
+  --ui-accent: #00ff9f;
+  --ui-accent-hot: #ff2e97;
+  --ui-text-primary: #e6e6e6;
+  --ui-text-secondary: #7d8590;
+  --ui-border: #1f2937;
+  --ui-sidebar-active: #0a0e27;
+  --ui-sidebar-hover: #1f2937;
+  --ui-input-bg: #0d1117;
+  --ui-input-border: #1f2937;
+  --ui-glow: rgba(0, 255, 159, 0.3);
+  --atom-accent: #00ff9f;
+  --atom-accent-light: #00ff9f;
+  --atom-teal: #00ff9f;
+  --atom-amber: #ff2e97;
+}
+[data-ui-theme="cyberpunk"] body {
+  background: linear-gradient(135deg, #0a0e27 0%, #0d0221 100%);
+  background-size: 200% 200%;
+  animation: ui-gradient-shift 15s ease infinite;
+}
+
+/* Option 2: Neural Network Blue */
+[data-ui-theme="neural"] {
+  --ui-bg-main: #0b0c10;
+  --ui-bg-sidebar: #1f2833;
+  --ui-accent: #66fcf1;
+  --ui-accent-hot: #ff6b6b;
+  --ui-text-primary: #c5c6c7;
+  --ui-text-secondary: #66fcf1;
+  --ui-border: #2d3748;
+  --ui-sidebar-active: #0b0c10;
+  --ui-sidebar-hover: #2d3748;
+  --ui-input-bg: #1f2833;
+  --ui-input-border: #2d3748;
+  --ui-glow: rgba(102, 252, 241, 0.3);
+  --atom-accent: #66fcf1;
+  --atom-accent-light: #66fcf1;
+  --atom-teal: #66fcf1;
+  --atom-amber: #45a29e;
+}
+[data-ui-theme="neural"] body {
+  background: linear-gradient(135deg, #0b0c10 0%, #1f2833 50%, #0b0c10 100%);
+  background-size: 200% 200%;
+  animation: ui-gradient-shift 18s ease infinite;
+}
+
+/* Option 3: Quantum Purple */
+[data-ui-theme="quantum"] {
+  --ui-bg-main: #0d0221;
+  --ui-bg-sidebar: #16001e;
+  --ui-accent: #7209b7;
+  --ui-accent-hot: #f72585;
+  --ui-text-primary: #f0f0f0;
+  --ui-text-secondary: #b8b8d1;
+  --ui-border: #2d1b4e;
+  --ui-sidebar-active: #0d0221;
+  --ui-sidebar-hover: #2d1b4e;
+  --ui-input-bg: #16001e;
+  --ui-input-border: #2d1b4e;
+  --ui-glow: rgba(114, 9, 183, 0.35);
+  --atom-accent: #f72585;
+  --atom-accent-light: #4361ee;
+  --atom-teal: #4361ee;
+  --atom-amber: #7209b7;
+}
+[data-ui-theme="quantum"] body {
+  background: linear-gradient(135deg, #0d0221 0%, #16001e 100%);
+  background-size: 200% 200%;
+  animation: ui-gradient-shift 15s ease infinite;
+}
+
+/* ========== Light themes ========== */
+
+/* Arctic Command (light + electric) */
+[data-ui-theme="arctic"] {
+  --ui-bg-main: #f8fafc;
+  --ui-bg-sidebar: #e0f2fe;
+  --ui-accent: #f97316;
+  --ui-accent-hot: #dc2626;
+  --ui-accent-cool: #0ea5e9;
+  --ui-text-primary: #0f172a;
+  --ui-text-secondary: #64748b;
+  --ui-border: #cbd5e1;
+  --ui-sidebar-active: #f8fafc;
+  --ui-sidebar-hover: #f8fafc;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #cbd5e1;
+  --ui-glow: rgba(14, 165, 233, 0.25);
+  --atom-accent: #0ea5e9;
+  --atom-accent-light: #06b6d4;
+  --atom-teal: #06b6d4;
+  --atom-amber: #f97316;
+}
+
+/* Neon Daylight (retro-future bright) */
+[data-ui-theme="neon"] {
+  --ui-bg-main: #ffffff;
+  --ui-bg-sidebar: #fef3c7;
+  --ui-accent: #eab308;
+  --ui-accent-hot: #dc2626;
+  --ui-accent-cool: #06b6d4;
+  --ui-text-primary: #171717;
+  --ui-text-secondary: #525252;
+  --ui-border: #e5e5e5;
+  --ui-sidebar-active: #ffffff;
+  --ui-sidebar-hover: #fef9c3;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #e5e5e5;
+  --ui-glow: rgba(234, 179, 8, 0.3);
+  --atom-accent: #eab308;
+  --atom-accent-light: #06b6d4;
+  --atom-teal: #06b6d4;
+  --atom-amber: #dc2626;
+}
+
+/* Mint Laboratory (fresh + technical) */
+[data-ui-theme="mint"] {
+  --ui-bg-main: #f0fdf4;
+  --ui-bg-sidebar: #d1fae5;
+  --ui-accent: #10b981;
+  --ui-accent-hot: #f59e0b;
+  --ui-accent-cool: #3b82f6;
+  --ui-text-primary: #064e3b;
+  --ui-text-secondary: #6b7280;
+  --ui-border: #d1d5db;
+  --ui-sidebar-active: #f0fdf4;
+  --ui-sidebar-hover: #ecfdf5;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #d1d5db;
+  --ui-glow: rgba(16, 185, 129, 0.25);
+  --atom-accent: #10b981;
+  --atom-accent-light: #3b82f6;
+  --atom-teal: #10b981;
+  --atom-amber: #f59e0b;
+}
+
+/* Coral Reef (warm + energetic) */
+[data-ui-theme="coral"] {
+  --ui-bg-main: #fffbeb;
+  --ui-bg-sidebar: #fed7aa;
+  --ui-accent: #f97316;
+  --ui-accent-hot: #dc2626;
+  --ui-accent-cool: #0891b2;
+  --ui-text-primary: #1c1917;
+  --ui-text-secondary: #78716c;
+  --ui-border: #e7e5e4;
+  --ui-sidebar-active: #fffbeb;
+  --ui-sidebar-hover: #fff7ed;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #e7e5e4;
+  --ui-glow: rgba(249, 115, 22, 0.25);
+  --atom-accent: #f97316;
+  --atom-accent-light: #0891b2;
+  --atom-teal: #0891b2;
+  --atom-amber: #dc2626;
+}
+
+/* High Contrast Lab (maximum pop) */
+[data-ui-theme="highcontrast"] {
+  --ui-bg-main: #ffffff;
+  --ui-bg-sidebar: #f3f4f6;
+  --ui-accent: #2563eb;
+  --ui-accent-hot: #dc2626;
+  --ui-text-primary: #000000;
+  --ui-text-secondary: #6b7280;
+  --ui-border: #d1d5db;
+  --ui-sidebar-active: #ffffff;
+  --ui-sidebar-hover: #e5e7eb;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #d1d5db;
+  --ui-glow: rgba(37, 99, 235, 0.25);
+  --atom-accent: #2563eb;
+  --atom-accent-light: #3b82f6;
+  --atom-teal: #16a34a;
+  --atom-amber: #ea580c;
+}
+
+/* Cyber Citrus (unconventional + bold) */
+[data-ui-theme="cybercitrus"] {
+  --ui-bg-main: #fefce8;
+  --ui-bg-sidebar: #fef08a;
+  --ui-accent: #65a30d;
+  --ui-accent-hot: #dc2626;
+  --ui-accent-cool: #0284c7;
+  --ui-text-primary: #14532d;
+  --ui-text-secondary: #4d7c0f;
+  --ui-border: #d9f99d;
+  --ui-sidebar-active: #fefce8;
+  --ui-sidebar-hover: #fef9c3;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #d9f99d;
+  --ui-glow: rgba(101, 163, 13, 0.3);
+  --atom-accent: #65a30d;
+  --atom-accent-light: #0284c7;
+  --atom-teal: #65a30d;
+  --atom-amber: #dc2626;
+}
+
+/* Option 7: Industrial Hazard (Yellow/Black - Maximum Visibility) */
+[data-ui-theme="industrialhazard"] {
+  --ui-bg-main: #ffffff;
+  --ui-bg-sidebar: #fef9c3;
+  --ui-accent: #facc15;
+  --ui-accent-hot: #000000;
+  --ui-accent-cool: #000000;
+  --ui-text-primary: #000000;
+  --ui-text-secondary: #404040;
+  --ui-border: #000000;
+  --ui-sidebar-active: #fef08a;
+  --ui-sidebar-hover: #fef9c3;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #000000;
+  --ui-glow: rgba(250, 204, 21, 0.4);
+  --atom-accent: #facc15;
+  --atom-accent-light: #dc2626;
+  --atom-teal: #16a34a;
+  --atom-amber: #000000;
+}
+
+/* Option 8: Fire & Ice (Extreme Contrast) */
+[data-ui-theme="fireice"] {
+  --ui-bg-main: #0c4a6e;
+  --ui-bg-sidebar: #075985;
+  --ui-accent: #ff6b35;
+  --ui-accent-hot: #fbbf24;
+  --ui-accent-cool: #38bdf8;
+  --ui-text-primary: #f0f9ff;
+  --ui-text-secondary: #7dd3fc;
+  --ui-border: #0e7490;
+  --ui-sidebar-active: #0c4a6e;
+  --ui-sidebar-hover: #0369a1;
+  --ui-input-bg: #075985;
+  --ui-input-border: #0e7490;
+  --ui-glow: rgba(255, 107, 53, 0.35);
+  --atom-accent: #ff6b35;
+  --atom-accent-light: #38bdf8;
+  --atom-teal: #38bdf8;
+  --atom-amber: #fbbf24;
+}
+[data-ui-theme="fireice"] body {
+  background: linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0c4a6e 100%);
+  background-size: 200% 200%;
+  animation: ui-gradient-shift 18s ease infinite;
+}
+
+/* Option 9: Hacker Terminal Green (Modern) */
+[data-ui-theme="hacker"] {
+  --ui-bg-main: #001a00;
+  --ui-bg-sidebar: #003300;
+  --ui-accent: #00ff41;
+  --ui-accent-hot: #ffff00;
+  --ui-accent-cool: #00cc33;
+  --ui-text-primary: #33ff77;
+  --ui-text-secondary: #00cc33;
+  --ui-border: #004d00;
+  --ui-sidebar-active: #001a00;
+  --ui-sidebar-hover: #002200;
+  --ui-input-bg: #003300;
+  --ui-input-border: #004d00;
+  --ui-glow: rgba(0, 255, 65, 0.35);
+  --atom-accent: #00ff41;
+  --atom-accent-light: #ffff00;
+  --atom-teal: #00ff41;
+  --atom-amber: #ffff00;
+}
+[data-ui-theme="hacker"] body {
+  background: #001a00;
+}
+
+/* Option 10: Medical Grade (Clinical Precision) */
+[data-ui-theme="medical"] {
+  --ui-bg-main: #f8f9fa;
+  --ui-bg-sidebar: #e9ecef;
+  --ui-accent: #0077b6;
+  --ui-accent-hot: #d62828;
+  --ui-accent-cool: #52b788;
+  --ui-accent-warning: #f77f00;
+  --ui-text-primary: #212529;
+  --ui-text-secondary: #6c757d;
+  --ui-border: #dee2e6;
+  --ui-sidebar-active: #f8f9fa;
+  --ui-sidebar-hover: #e9ecef;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #dee2e6;
+  --ui-glow: rgba(0, 119, 182, 0.25);
+  --atom-accent: #0077b6;
+  --atom-accent-light: #52b788;
+  --atom-teal: #52b788;
+  --atom-amber: #f77f00;
+}
+
+/* Option 11: Radioactive Lab (Neon Lime Science) – dynamic: subtle accent pulse */
+[data-ui-theme="radioactivelab"] {
+  --ui-bg-main: #0a0a0a;
+  --ui-bg-sidebar: #1a1a1a;
+  --ui-accent: #ccff00;
+  --ui-accent-hot: #ff3366;
+  --ui-accent-cool: #00ffff;
+  --ui-accent-warning: #ffff00;
+  --ui-text-primary: #ffffff;
+  --ui-text-secondary: #99ff00;
+  --ui-border: #333333;
+  --ui-sidebar-active: #252525;
+  --ui-sidebar-hover: #2a2a2a;
+  --ui-input-bg: #1a1a1a;
+  --ui-input-border: #333333;
+  --ui-glow: rgba(204, 255, 0, 0.35);
+  --atom-accent: #ccff00;
+  --atom-accent-light: #99ff00;
+  --atom-teal: #00ffff;
+  --atom-amber: #ff3366;
+}
+[data-ui-theme="radioactivelab"] body {
+  background: #0a0a0a;
+}
+[data-ui-theme="radioactivelab"] .ui-btn-accent,
+[data-ui-theme="radioactivelab"] .ui-sidebar-active {
+  animation: theme-heartbeat 2s ease-in-out infinite;
+}
+
+/* Option 12: Copper Circuit (Warm Industrial) */
+[data-ui-theme="coppercircuit"] {
+  --ui-bg-main: #1a1410;
+  --ui-bg-sidebar: #2d2319;
+  --ui-accent: #ff6b35;
+  --ui-accent-secondary: #d4af37;
+  --ui-accent-hot: #ff6b35;
+  --ui-accent-cool: #4a9eff;
+  --ui-text-primary: #fef5e7;
+  --ui-text-secondary: #c19a6b;
+  --ui-border: #3d2f1f;
+  --ui-sidebar-active: #3d2f1f;
+  --ui-sidebar-hover: #4a3a28;
+  --ui-input-bg: #2d2319;
+  --ui-input-border: #3d2f1f;
+  --ui-glow: rgba(255, 107, 53, 0.3);
+  --atom-accent: #ff6b35;
+  --atom-accent-light: #d4af37;
+  --atom-teal: #4a9eff;
+  --atom-amber: #d4af37;
+}
+[data-ui-theme="coppercircuit"] body {
+  background: #1a1410;
+}
+
+/* Option 13: Arctic Neon (Ice + Electric) – dynamic: subtle body gradient */
+[data-ui-theme="arcticneon"] {
+  --ui-bg-main: #e8f4f8;
+  --ui-bg-sidebar: #b8e6f0;
+  --ui-accent: #00d9ff;
+  --ui-accent-hot: #ff1744;
+  --ui-accent-cool: #00bfa5;
+  --ui-text-primary: #001a1f;
+  --ui-text-secondary: #004d5c;
+  --ui-border: #80deea;
+  --ui-sidebar-active: #e0f7fa;
+  --ui-sidebar-hover: #b2ebf2;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #80deea;
+  --ui-glow: rgba(0, 217, 255, 0.3);
+  --atom-accent: #00d9ff;
+  --atom-accent-light: #00bfa5;
+  --atom-teal: #00bfa5;
+  --atom-amber: #ff1744;
+}
+[data-ui-theme="arcticneon"] body {
+  background: linear-gradient(135deg, #e8f4f8 0%, #b8e6f0 50%, #e8f4f8 100%);
+  background-size: 200% 200%;
+  animation: ui-gradient-shift 20s ease infinite;
+}
+
+/* Option 14: Sunset Gradient (Orange/Pink Dynamic) – gradient accent */
+[data-ui-theme="sunsetgradient"] {
+  --ui-bg-main: #fff5f5;
+  --ui-bg-sidebar: #ffe0e0;
+  --ui-accent: #ff6b35;
+  --ui-accent-hot: #ff1744;
+  --ui-text-primary: #2d1b1e;
+  --ui-text-secondary: #8b4049;
+  --ui-border: #ffb3ba;
+  --ui-sidebar-active: #ffebee;
+  --ui-sidebar-hover: #ffcdd2;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #ffb3ba;
+  --ui-glow: rgba(255, 107, 53, 0.3);
+  --ui-accent-gradient: linear-gradient(135deg, #ff8c42 0%, #ff6b6b 100%);
+  --atom-accent: #ff6b35;
+  --atom-accent-light: #ff6b6b;
+  --atom-teal: #ff8c42;
+  --atom-amber: #ff1744;
+}
+[data-ui-theme="sunsetgradient"] body {
+  background: linear-gradient(180deg, #fff5f5 0%, #ffe0e0 100%);
+  background-size: 100% 200%;
+  animation: ui-gradient-shift 25s ease infinite;
+}
+[data-ui-theme="sunsetgradient"] .ui-btn-accent {
+  background: var(--ui-accent-gradient);
+  color: #2d1b1e;
+}
+
+/* Option 15: Racing Stripe (Red/White/Black Speed) */
+[data-ui-theme="racingstripe"] {
+  --ui-bg-main: #ffffff;
+  --ui-bg-sidebar: #f5f5f5;
+  --ui-accent: #e30613;
+  --ui-accent-secondary: #000000;
+  --ui-accent-cool: #c0c0c0;
+  --ui-text-primary: #000000;
+  --ui-text-secondary: #666666;
+  --ui-border: #dddddd;
+  --ui-sidebar-active: #ffffff;
+  --ui-sidebar-hover: #eeeeee;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #dddddd;
+  --ui-glow: rgba(227, 6, 19, 0.35);
+  --atom-accent: #e30613;
+  --atom-accent-light: #000000;
+  --atom-teal: #c0c0c0;
+  --atom-amber: #e30613;
+}
+[data-ui-theme="racingstripe"] body {
+  background: #ffffff;
+}
+
+/* Option 16: Jungle Terminal (Green, Not Matrix) */
+[data-ui-theme="jungleterminal"] {
+  --ui-bg-main: #f0f4f0;
+  --ui-bg-sidebar: #d4e7d4;
+  --ui-accent: #2d5016;
+  --ui-accent-hot: #ff6b35;
+  --ui-accent-cool: #004d40;
+  --ui-text-primary: #1a1a1a;
+  --ui-text-secondary: #4a6741;
+  --ui-border: #a8c99c;
+  --ui-sidebar-active: #e8f0e8;
+  --ui-sidebar-hover: #dce8dc;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #a8c99c;
+  --ui-glow: rgba(45, 80, 22, 0.3);
+  --atom-accent: #2d5016;
+  --atom-accent-light: #004d40;
+  --atom-teal: #004d40;
+  --atom-amber: #ff6b35;
+}
+[data-ui-theme="jungleterminal"] body {
+  background: #f0f4f0;
+}
+
+/* Option 17: Magma Flow (Red/Orange/Black Heat) – dynamic: heat gradient shift */
+[data-ui-theme="magmaflow"] {
+  --ui-bg-main: #1a0a00;
+  --ui-bg-sidebar: #2d1400;
+  --ui-accent: #ff4500;
+  --ui-accent-hot: #ff6347;
+  --ui-accent-cool: #ffa500;
+  --ui-text-primary: #fff5ee;
+  --ui-text-secondary: #ffb366;
+  --ui-border: #4d2600;
+  --ui-sidebar-active: #3d1a00;
+  --ui-sidebar-hover: #4d2600;
+  --ui-input-bg: #2d1400;
+  --ui-input-border: #4d2600;
+  --ui-glow: rgba(255, 69, 0, 0.4);
+  --atom-accent: #ff4500;
+  --atom-accent-light: #ff6347;
+  --atom-teal: #ffa500;
+  --atom-amber: #ff6347;
+}
+[data-ui-theme="magmaflow"] body {
+  background: linear-gradient(135deg, #1a0a00 0%, #2d1400 40%, #4d2600 70%, #1a0a00 100%);
+  background-size: 200% 200%;
+  animation: ui-gradient-shift 18s ease infinite;
+}
+
+/* Option 18: Chrome & Glass (Ultra Modern) – glassmorphism */
+[data-ui-theme="chromeglass"] {
+  --ui-bg-main: #f8f9fa;
+  --ui-bg-sidebar: rgba(233, 236, 239, 0.85);
+  --ui-accent: #0066cc;
+  --ui-accent-metallic: #c0c0c0;
+  --ui-text-primary: #212529;
+  --ui-text-secondary: #6c757d;
+  --ui-border: #dee2e6;
+  --ui-sidebar-active: rgba(255, 255, 255, 0.5);
+  --ui-sidebar-hover: rgba(255, 255, 255, 0.3);
+  --ui-input-bg: rgba(255, 255, 255, 0.9);
+  --ui-input-border: #dee2e6;
+  --ui-glow: rgba(0, 102, 204, 0.25);
+  --ui-glass: rgba(255, 255, 255, 0.15);
+  --atom-accent: #0066cc;
+  --atom-accent-light: #3399ff;
+  --atom-teal: #0066cc;
+  --atom-amber: #c0c0c0;
+}
+[data-ui-theme="chromeglass"] body {
+  background: #f8f9fa;
+}
+[data-ui-theme="chromeglass"] aside,
+[data-ui-theme="chromeglass"] [class*="backdrop-blur"],
+[data-ui-theme="chromeglass"] .ui-card-style {
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--ui-bg-sidebar) 90%, var(--ui-glass));
+}
+
+/* Option 19: Toxic Waste (Yellow/Black Hazard) – dynamic: accent pulse */
+[data-ui-theme="toxicwaste"] {
+  --ui-bg-main: #000000;
+  --ui-bg-sidebar: #1a1a00;
+  --ui-accent: #ffff00;
+  --ui-accent-hot: #ff00ff;
+  --ui-accent-cool: #00ff00;
+  --ui-text-primary: #ffff00;
+  --ui-text-secondary: #cccc00;
+  --ui-border: #333300;
+  --ui-sidebar-active: #2a2a00;
+  --ui-sidebar-hover: #333300;
+  --ui-input-bg: #1a1a00;
+  --ui-input-border: #333300;
+  --ui-glow: rgba(255, 255, 0, 0.4);
+  --atom-accent: #ffff00;
+  --atom-accent-light: #00ff00;
+  --atom-teal: #00ff00;
+  --atom-amber: #ff00ff;
+}
+[data-ui-theme="toxicwaste"] body {
+  background: #000000;
+}
+[data-ui-theme="toxicwaste"] .ui-btn-accent {
+  animation: theme-heartbeat 2.2s ease-in-out infinite;
+}
+
+/* Option 20: Ocean Deep (Blue/Teal Underwater) – dynamic: depth gradient */
+[data-ui-theme="oceandeep"] {
+  --ui-bg-main: #001529;
+  --ui-bg-sidebar: #002140;
+  --ui-accent: #1890ff;
+  --ui-accent-hot: #13c2c2;
+  --ui-accent-cool: #52c41a;
+  --ui-text-primary: #e6f7ff;
+  --ui-text-secondary: #91d5ff;
+  --ui-border: #003a70;
+  --ui-sidebar-active: #003050;
+  --ui-sidebar-hover: #003a70;
+  --ui-input-bg: #002140;
+  --ui-input-border: #003a70;
+  --ui-glow: rgba(24, 144, 255, 0.35);
+  --atom-accent: #1890ff;
+  --atom-accent-light: #13c2c2;
+  --atom-teal: #13c2c2;
+  --atom-amber: #52c41a;
+}
+[data-ui-theme="oceandeep"] body {
+  background: linear-gradient(180deg, #001529 0%, #002140 50%, #001529 100%);
+  background-size: 100% 200%;
+  animation: ui-gradient-shift 22s ease infinite;
+}
+
+/* ATOM — Clinical, high-contrast dark (Unified Multimedia Gatekeeper default) */
+[data-ui-theme="atom"] {
+  --ui-bg-main: #0c0c0c;
+  --ui-bg-sidebar: #141414;
+  --ui-accent: #00d4aa;
+  --ui-accent-hot: #00ffcc;
+  --ui-accent-cool: #00a88a;
+  --ui-text-primary: #f5f5f5;
+  --ui-text-secondary: #a3a3a3;
+  --ui-border: #262626;
+  --ui-sidebar-active: #1a1a1a;
+  --ui-sidebar-hover: #1f1f1f;
+  --ui-input-bg: #141414;
+  --ui-input-border: #262626;
+  --ui-glow: rgba(0, 212, 170, 0.25);
+  --atom-accent: #00d4aa;
+  --atom-accent-light: #00ffcc;
+  --atom-teal: #00a88a;
+  --atom-amber: #00d4aa;
+}
+[data-ui-theme="atom"] body {
+  background: #0c0c0c;
+}
+
+@keyframes theme-heartbeat {
+  0%, 100% { opacity: 1; box-shadow: 0 4px 15px var(--ui-glow); }
+  50% { opacity: 0.92; box-shadow: 0 4px 24px var(--ui-glow); }
+}
+
+@keyframes ui-gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Theme-aware utilities (glow, etc.) */
+.ui-input-glow:focus-within {
+  border-color: var(--ui-accent-cool, var(--ui-accent));
+  box-shadow: 0 0 15px var(--ui-glow);
+}
+.ui-input-glow textarea::placeholder {
+  color: var(--ui-text-secondary);
+  opacity: 0.9;
+}
+.ui-btn-accent {
+  background: var(--ui-accent);
+  color: var(--ui-bg-main);
+  box-shadow: 0 4px 15px var(--ui-glow);
+  transition: all 0.15s ease;
+}
+.ui-btn-accent:hover {
+  box-shadow: 0 6px 20px var(--ui-glow);
+  transform: translateY(-1px);
+}
+.ui-sidebar-active {
+  border-left: 3px solid var(--ui-accent-cool, var(--ui-accent));
+  background: linear-gradient(90deg, var(--ui-glow) 0%, transparent 100%);
+}
+.ui-pill-suggestion {
+  color: var(--ui-accent);
+  border-color: var(--ui-accent);
+  background: transparent;
+  transition: all 0.15s ease;
+}
+.ui-pill-suggestion:hover {
+  background: var(--ui-accent);
+  color: var(--ui-bg-main);
+}
+.ui-model-selector-open {
+  border-color: var(--ui-accent-cool, var(--ui-accent)) !important;
+}
+
+/* ========== Dynamic UI (theme/layout transitions, animations) ========== */
+/* Revert: see docs/ATOM-DYNAMIC-UI-UNDO.md */
+
+/* 400ms theme switch transition */
+html {
+  transition: background-color 400ms ease, color 400ms ease;
+}
+body {
+  transition: background-color 400ms ease;
+}
+
+/* 300ms layout/panel transitions */
+.atom-layout-transition,
+.atom-panel-wrap {
+  transition: width 300ms ease, min-width 300ms ease, grid-template-columns 300ms ease, opacity 300ms ease;
+}
+
+/* Streaming: pulsing border glow */
+.atom-streaming-glow {
+  animation: atom-streaming-glow 1.5s ease-in-out infinite;
+}
+@keyframes atom-streaming-glow {
+  0%, 100% { box-shadow: 0 0 0 1px var(--ui-border), 0 0 12px rgba(6, 182, 212, 0.2); }
+  50% { box-shadow: 0 0 0 1px var(--atom-teal), 0 0 20px rgba(6, 182, 212, 0.4); }
+}
+
+/* Response complete: brief green flash */
+.atom-complete-flash {
+  animation: atom-complete-flash 500ms ease-out forwards;
+}
+@keyframes atom-complete-flash {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+  40% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0.15); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Error: red shake */
+.atom-error-shake {
+  animation: atom-error-shake 0.4s ease-in-out;
+}
+@keyframes atom-error-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-6px); }
+  30% { transform: translateX(5px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(3px); }
+  75% { transform: translateX(-2px); }
+}
+
+/* Subtle animated gradient background (15s loop, low opacity). Disabled in .atom-performance-mode */
+.atom-gradient-bg::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.06;
+  background: linear-gradient(
+    135deg,
+    var(--atom-teal) 0%,
+    transparent 30%,
+    var(--atom-accent) 50%,
+    transparent 70%,
+    var(--atom-amber) 100%
+  );
+  background-size: 200% 200%;
+  animation: atom-gradient-drift 15s ease-in-out infinite;
+  pointer-events: none;
+}
+.atom-performance-mode .atom-gradient-bg::before {
+  display: none;
+}
+@keyframes atom-gradient-drift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Reduced motion: disable or shorten animations */
+@media (prefers-reduced-motion: reduce) {
+  html, body { transition-duration: 0.01ms; }
+  .atom-layout-transition,
+  .atom-panel-wrap { transition-duration: 0.01ms; }
+  .atom-streaming-glow { animation: none; box-shadow: 0 0 0 1px var(--ui-border); }
+  .atom-complete-flash { animation: none; }
+  .atom-error-shake { animation: none; }
+  .atom-gradient-bg::before { animation: none; }
+}
