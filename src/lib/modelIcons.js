@@ -5,7 +5,11 @@ import { resolveHfRepoForIcon, fetchReadmeFirstImageUrl } from './huggingface.js
  * Map LM Studio model id to icon filename in /model-icons/
  * Icons are in public/model-icons/ (e.g. qwen-color.svg).
  */
+/** Official Inference.net org avatar (Hugging Face) – used for Schematron / Inference.net models */
+const INFERENCE_NET_ICON_URL = 'https://cdn-avatars.huggingface.co/v1/production/uploads/63f6af26a67b8acfa503a527/Dgmzs6RMe7equJe3-rOq1.png';
+
 const MODEL_ICON_MAP = [
+  [/schematron|inference[-.]?net/i, INFERENCE_NET_ICON_URL],
   [/meta[-_]?llama|llama|meta\b/i, 'meta-llama-color.svg'],
   [/microsoft|phi\s*3|phi3|\bphi\b/i, 'microsoft-phi-color.svg'],
   [/baidu|ernie/i, 'baidu-ernie-color.svg'],
@@ -112,8 +116,10 @@ async function fetchAndFillIcons(modelIds) {
 export function getModelIcon(modelId, overrides) {
   if (!modelId || typeof modelId !== 'string') return DEFAULT_ICON;
   const lower = modelId.toLowerCase();
-  for (const [pattern, filename] of MODEL_ICON_MAP) {
-    if (patternMatches(pattern, lower)) return `/model-icons/${filename}`;
+  for (const [pattern, icon] of MODEL_ICON_MAP) {
+    if (patternMatches(pattern, lower)) {
+      return icon.startsWith('http') ? icon : `/model-icons/${icon}`;
+    }
   }
   const c = overrides ?? cache;
   if (c[modelId]) return c[modelId];

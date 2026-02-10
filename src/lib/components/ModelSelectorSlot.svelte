@@ -5,6 +5,7 @@
   import { getModelIcon, getQuantization, ensureModelIcons, modelIconOverrides } from '$lib/modelIcons.js';
   import { getDefaultsForModel } from '$lib/modelDefaults.js';
   import { getRecommendedFromHf } from '$lib/huggingface.js';
+  import ModelCapabilityBadges from '$lib/components/ModelCapabilityBadges.svelte';
 
   let { slot = 'A' } = $props();
   let open = $state(false);
@@ -26,7 +27,7 @@
         top: r.bottom + 4,
         bottom: window.innerHeight - r.top + 4,
         left: r.left,
-        width: Math.max(r.width, 200),
+        width: Math.max(r.width, 280),
         maxHeight: Math.max(120, maxHeight),
         openUp,
       };
@@ -105,11 +106,12 @@
           {@const selIcon = getModelIcon(val, $modelIconOverrides)}
           {#if selIcon}<img src={selIcon} alt="" class="w-4 h-4 shrink-0 rounded object-contain" />{/if}
           <span class="truncate font-bold uppercase tracking-tight text-xs">{val}</span>
+          <ModelCapabilityBadges modelId={val} class="ml-0.5" />
         {:else}<span class="text-zinc-500 dark:text-zinc-400">Select model</span>{/if}
         <svg class="w-4 h-4 shrink-0 ml-1 transition-transform duration-150 {open ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
       </button>
       {#if open}
-        <div id="model-listbox-A" class="fixed z-[100] rounded-xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg py-1 overflow-y-auto min-w-[200px]" style="left: {dropdownPlace.left}px; width: {dropdownPlace.width}px; max-height: {dropdownPlace.maxHeight}px; {dropdownPlace.openUp ? 'bottom: ' + dropdownPlace.bottom + 'px; top: auto;' : 'top: ' + dropdownPlace.top + 'px;'}" role="listbox">
+        <div id="model-listbox-A" class="fixed z-[100] rounded-xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg py-1 overflow-y-auto overflow-x-visible min-w-[280px]" style="left: {dropdownPlace.left}px; width: {dropdownPlace.width}px; max-height: {dropdownPlace.maxHeight}px; {dropdownPlace.openUp ? 'bottom: ' + dropdownPlace.bottom + 'px; top: auto;' : 'top: ' + dropdownPlace.top + 'px;'}" role="listbox">
           {#if loading}
             <div class="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">Loading models…</div>
           {:else if $models.length === 0}
@@ -123,7 +125,10 @@
               {@const icon = getModelIcon(m.id, $modelIconOverrides)}
               <button type="button" class="flex items-center gap-2 w-full px-4 py-2.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors {val === m.id ? 'bg-zinc-50 dark:bg-zinc-700/50 font-medium' : ''}" role="option" aria-selected={val === m.id} onclick={() => select(m.id)}>
                 <img src={icon} alt="" class="w-5 h-5 shrink-0 rounded object-contain" />
-                <span class="truncate">{m.id}</span>
+                <span class="min-w-0 flex-1 flex items-center gap-1.5">
+                  <span class="truncate">{m.id}</span>
+                  <ModelCapabilityBadges modelId={m.id} />
+                </span>
               </button>
             {/each}
           {/if}
@@ -142,11 +147,12 @@
           {@const selIcon = getModelIcon(val, $modelIconOverrides)}
           {#if selIcon}<img src={selIcon} alt="" class="w-4 h-4 shrink-0 rounded object-contain" />{/if}
           <span class="truncate font-bold uppercase tracking-tight text-xs">{val}</span>
+          <ModelCapabilityBadges modelId={val} class="ml-0.5" />
         {:else}<span class="text-zinc-500 dark:text-zinc-400">Select model</span>{/if}
         <svg class="w-4 h-4 shrink-0 ml-1 transition-transform duration-150 {open ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
       </button>
       {#if open}
-        <div id="model-listbox-B" class="fixed z-[100] rounded-xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg py-1 overflow-y-auto min-w-[200px]" style="left: {dropdownPlace.left}px; width: {dropdownPlace.width}px; max-height: {dropdownPlace.maxHeight}px; {dropdownPlace.openUp ? 'bottom: ' + dropdownPlace.bottom + 'px; top: auto;' : 'top: ' + dropdownPlace.top + 'px;'}" role="listbox">
+        <div id="model-listbox-B" class="fixed z-[100] rounded-xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg py-1 overflow-y-auto overflow-x-visible min-w-[280px]" style="left: {dropdownPlace.left}px; width: {dropdownPlace.width}px; max-height: {dropdownPlace.maxHeight}px; {dropdownPlace.openUp ? 'bottom: ' + dropdownPlace.bottom + 'px; top: auto;' : 'top: ' + dropdownPlace.top + 'px;'}" role="listbox">
           {#if loading}
             <div class="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">Loading models…</div>
           {:else if $models.length === 0}
@@ -160,7 +166,10 @@
               {@const icon = getModelIcon(m.id, $modelIconOverrides)}
               <button type="button" class="flex items-center gap-2 w-full px-4 py-2.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors {val === m.id ? 'bg-zinc-50 dark:bg-zinc-700/50 font-medium' : ''}" role="option" aria-selected={val === m.id} onclick={() => select(m.id)}>
                 <img src={icon} alt="" class="w-5 h-5 shrink-0 rounded object-contain" />
-                <span class="truncate">{m.id}</span>
+                <span class="min-w-0 flex-1 flex items-center gap-1.5">
+                  <span class="truncate">{m.id}</span>
+                  <ModelCapabilityBadges modelId={m.id} />
+                </span>
               </button>
             {/each}
           {/if}
@@ -179,11 +188,12 @@
           {@const selIcon = getModelIcon(val, $modelIconOverrides)}
           {#if selIcon}<img src={selIcon} alt="" class="w-4 h-4 shrink-0 rounded object-contain" />{/if}
           <span class="truncate font-bold uppercase tracking-tight text-xs">{val}</span>
+          <ModelCapabilityBadges modelId={val} class="ml-0.5" />
         {:else}<span class="text-zinc-500 dark:text-zinc-400">Select model</span>{/if}
         <svg class="w-4 h-4 shrink-0 ml-1 transition-transform duration-150 {open ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
       </button>
       {#if open}
-        <div id="model-listbox-C" class="fixed z-[100] rounded-xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg py-1 overflow-y-auto min-w-[200px]" style="left: {dropdownPlace.left}px; width: {dropdownPlace.width}px; max-height: {dropdownPlace.maxHeight}px; {dropdownPlace.openUp ? 'bottom: ' + dropdownPlace.bottom + 'px; top: auto;' : 'top: ' + dropdownPlace.top + 'px;'}" role="listbox">
+        <div id="model-listbox-C" class="fixed z-[100] rounded-xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg py-1 overflow-y-auto overflow-x-visible min-w-[280px]" style="left: {dropdownPlace.left}px; width: {dropdownPlace.width}px; max-height: {dropdownPlace.maxHeight}px; {dropdownPlace.openUp ? 'bottom: ' + dropdownPlace.bottom + 'px; top: auto;' : 'top: ' + dropdownPlace.top + 'px;'}" role="listbox">
           {#if loading}
             <div class="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">Loading models…</div>
           {:else if $models.length === 0}
@@ -197,7 +207,10 @@
               {@const icon = getModelIcon(m.id, $modelIconOverrides)}
               <button type="button" class="flex items-center gap-2 w-full px-4 py-2.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors {val === m.id ? 'bg-zinc-50 dark:bg-zinc-700/50 font-medium' : ''}" role="option" aria-selected={val === m.id} onclick={() => select(m.id)}>
                 <img src={icon} alt="" class="w-5 h-5 shrink-0 rounded object-contain" />
-                <span class="truncate">{m.id}</span>
+                <span class="min-w-0 flex-1 flex items-center gap-1.5">
+                  <span class="truncate">{m.id}</span>
+                  <ModelCapabilityBadges modelId={m.id} />
+                </span>
               </button>
             {/each}
           {/if}
@@ -216,11 +229,12 @@
           {@const selIcon = getModelIcon(val, $modelIconOverrides)}
           {#if selIcon}<img src={selIcon} alt="" class="w-4 h-4 shrink-0 rounded object-contain" />{/if}
           <span class="truncate font-bold uppercase tracking-tight text-xs">{val}</span>
+          <ModelCapabilityBadges modelId={val} class="ml-0.5" />
         {:else}<span class="text-zinc-500 dark:text-zinc-400">Select model</span>{/if}
         <svg class="w-4 h-4 shrink-0 ml-1 transition-transform duration-150 {open ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
       </button>
       {#if open}
-        <div id="model-listbox-D" class="fixed z-[100] rounded-xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg py-1 overflow-y-auto min-w-[200px]" style="left: {dropdownPlace.left}px; width: {dropdownPlace.width}px; max-height: {dropdownPlace.maxHeight}px; {dropdownPlace.openUp ? 'bottom: ' + dropdownPlace.bottom + 'px; top: auto;' : 'top: ' + dropdownPlace.top + 'px;'}" role="listbox">
+        <div id="model-listbox-D" class="fixed z-[100] rounded-xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg py-1 overflow-y-auto overflow-x-visible min-w-[280px]" style="left: {dropdownPlace.left}px; width: {dropdownPlace.width}px; max-height: {dropdownPlace.maxHeight}px; {dropdownPlace.openUp ? 'bottom: ' + dropdownPlace.bottom + 'px; top: auto;' : 'top: ' + dropdownPlace.top + 'px;'}" role="listbox">
           {#if loading}
             <div class="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">Loading models…</div>
           {:else if $models.length === 0}
@@ -234,7 +248,10 @@
               {@const icon = getModelIcon(m.id, $modelIconOverrides)}
               <button type="button" class="flex items-center gap-2 w-full px-4 py-2.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors {val === m.id ? 'bg-zinc-50 dark:bg-zinc-700/50 font-medium' : ''}" role="option" aria-selected={val === m.id} onclick={() => select(m.id)}>
                 <img src={icon} alt="" class="w-5 h-5 shrink-0 rounded object-contain" />
-                <span class="truncate">{m.id}</span>
+                <span class="min-w-0 flex-1 flex items-center gap-1.5">
+                  <span class="truncate">{m.id}</span>
+                  <ModelCapabilityBadges modelId={m.id} />
+                </span>
               </button>
             {/each}
           {/if}
