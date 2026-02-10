@@ -9,7 +9,7 @@
 
   let open = $state(false);
   let triggerEl = $state(null);
-  let dropdownPlace = $state({ top: 0, left: 0, width: 200, maxHeight: 256, openUp: false });
+  let dropdownPlace = $state({ top: 0, left: 0, width: 200, maxHeight: 420, openUp: false });
 
   $effect(() => {
     if (!open || !triggerEl) return;
@@ -19,7 +19,7 @@
       const spaceBelow = window.innerHeight - r.bottom - 8;
       const spaceAbove = r.top - 8;
       const openUp = spaceBelow < 260 && spaceAbove > spaceBelow;
-      const maxHeight = openUp ? Math.min(256, spaceAbove) : Math.min(256, spaceBelow);
+      const maxHeight = openUp ? Math.min(420, spaceAbove) : Math.min(420, spaceBelow);
       dropdownPlace = {
         top: r.bottom + 4,
         bottom: window.innerHeight - r.top + 4,

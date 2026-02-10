@@ -19,10 +19,20 @@ function getLmStudioBase() {
 }
 
 /**
+ * Normalize a single model entry from LM Studio REST or OpenAI-compat response to { id }.
+ * REST: { type, key, id?, display_name? }. OpenAI: { id }.
+ */
+function toModelItem(m) {
+  if (!m || typeof m !== 'object') return null;
+  const id = m.key ?? m.id ?? m.display_name;
+  if (typeof id !== 'string' || !id.trim()) return null;
+  return { id: id.trim() };
+}
+
+/**
  * Fetch list of models from LM Studio.
  * Uses LM Studio 0.4.x native GET /api/v1/models (all downloaded LLMs) when available,
- * so Dashboard and main selector show every model, not only currently loaded ones.
- * Falls back to OpenAI-compat GET /v1/models (loaded only) for older LM Studio.
+ * so all pull-downs show every model. Falls back to OpenAI-compat GET /v1/models (loaded only) for older LM Studio.
  * @returns {Promise<{ id: string }[]>}
  */
 export async function getModels() {
@@ -32,17 +42,21 @@ export async function getModels() {
   const res = await fetch(`${rest}/models`);
   if (res.ok) {
     const data = await res.json();
-    const models = data.models ?? [];
-    const llms = Array.isArray(models)
-      ? models.filter((m) => m.type === 'llm').map((m) => ({ id: m.key ?? m.id }))
-      : [];
-    if (llms.length > 0) return llms;
+    const raw = data.models ?? (Array.isArray(data) ? data : []);
+    if (Array.isArray(raw) && raw.length > 0) {
+      const llms = raw
+        .filter((m) => m && m.type !== 'embedding')
+        .map(toModelItem)
+        .filter(Boolean);
+      if (llms.length > 0) return llms;
+    }
   }
   const fallback = await fetch(`${openai}/models`);
   if (!fallback.ok) throw new Error(`LM Studio models: ${fallback.status}`);
   const data = await fallback.json();
   const list = data.data ?? data;
-  return Array.isArray(list) ? list.map((m) => ({ id: m.id ?? m.id })) : [];
+  const arr = Array.isArray(list) ? list : [];
+  return arr.map(toModelItem).filter(Boolean);
 }
 
 /**

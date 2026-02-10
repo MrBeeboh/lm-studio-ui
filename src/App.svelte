@@ -3,8 +3,9 @@
   import { get } from 'svelte/store';
   import { fly } from 'svelte/transition';
   import { backOut, quintOut } from 'svelte/easing';
-  import { theme, sidebarOpen, settingsOpen, layout, dashboardModelA, dashboardModelB, dashboardModelC, dashboardModelD, activeConversationId, conversations, selectedModelId, uiTheme, sidebarCollapsed, cockpitIntelOpen, arenaPanelCount } from '$lib/stores.js';
+  import { theme, sidebarOpen, settingsOpen, layout, dashboardModelA, dashboardModelB, dashboardModelC, dashboardModelD, activeConversationId, conversations, selectedModelId, uiTheme, sidebarCollapsed, cockpitIntelOpen, arenaPanelCount, models } from '$lib/stores.js';
   import { createConversation, listConversations, getMessageCount, getMessages } from '$lib/db.js';
+  import { getModels } from '$lib/api.js';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import ChatView from '$lib/components/ChatView.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
@@ -64,6 +65,13 @@
     list = await Promise.all(list.map(async (c) => ({ ...c, messageCount: await getMessageCount(c.id) })));
     conversations.set(list);
     if (!get(activeConversationId) && list.length > 0) activeConversationId.set(list[0].id);
+
+    try {
+      const modelList = await getModels();
+      models.set(modelList.map((m) => ({ id: m.id })));
+    } catch (_) {
+      // LM Studio may not be running; selectors will refetch when opened
+    }
   });
 
   async function refreshConversations() {
