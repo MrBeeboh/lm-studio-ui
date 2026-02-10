@@ -5,7 +5,7 @@
   import { sendMessage } from '$lib/api/lmstudio.js';
   import MessageList from '$lib/components/MessageList.svelte';
   import ChatInput from '$lib/components/ChatInput.svelte';
-  import { generateId } from '$lib/utils.js';
+  import { generateId, resizeImageDataUrlsForVision, shouldSkipImageResizeForVision } from '$lib/utils.js';
 
   const convId = $derived($activeConversationId);
 
@@ -43,10 +43,14 @@
       return;
     }
 
+    // Resize/compress images for vision API (avoids HTTP 400 on large base64). Skip for Qwen-VL 4B/8B — they work with full size.
+    const urlsForApi = hasImages
+      ? (shouldSkipImageResizeForVision($effectiveModelId) ? imageDataUrls : await resizeImageDataUrlsForVision(imageDataUrls))
+      : [];
     const userContent = hasImages
       ? [
           ...(hasText ? [{ type: 'text', text: text.trim() }] : [{ type: 'text', text: ' ' }]),
-          ...imageDataUrls.map((url) => ({ type: 'image_url', image_url: { url } })),
+          ...urlsForApi.map((url) => ({ type: 'image_url', image_url: { url } })),
         ]
       : text.trim();
     await addMessage(convId, { role: 'user', content: userContent });

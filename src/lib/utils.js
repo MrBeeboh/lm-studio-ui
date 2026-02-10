@@ -3,6 +3,75 @@ export function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
+/**
+ * Resize/compress image data URLs for vision APIs (avoids LM Studio 400 on large base64).
+ * Max dimension 1024px, JPEG 0.85. Returns same URL if not an image data URL.
+ * @param {string} dataUrl
+ * @returns {Promise<string>}
+ */
+export function resizeImageForVision(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) {
+    return Promise.resolve(dataUrl);
+  }
+  const maxDim = 1024;
+  const jpegQuality = 0.85;
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        let w = img.naturalWidth;
+        let h = img.naturalHeight;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        const out = canvas.toDataURL('image/jpeg', jpegQuality);
+        resolve(out || dataUrl);
+      } catch (e) {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+/**
+ * Resize multiple image data URLs for vision API. Preserves order.
+ * @param {string[]} dataUrls
+ * @returns {Promise<string[]>}
+ */
+export async function resizeImageDataUrlsForVision(dataUrls) {
+  if (!Array.isArray(dataUrls) || dataUrls.length === 0) return dataUrls;
+  return Promise.all(dataUrls.map(resizeImageForVision));
+}
+
+/**
+ * True if this model is Qwen-VL 4B or 8B — those work with full-size images; skip resize to preserve quality.
+ * @param {string} [modelId]
+ * @returns {boolean}
+ */
+export function shouldSkipImageResizeForVision(modelId) {
+  if (!modelId || typeof modelId !== 'string') return false;
+  const lower = modelId.toLowerCase();
+  return /qwen.*vl.*(4b|8b)|(4b|8b).*qwen.*vl/.test(lower);
+}
+
 /** Format date for sidebar list */
 export function formatTime(date) {
   const d = typeof date === 'number' ? new Date(date) : date;
