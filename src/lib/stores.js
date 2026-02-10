@@ -237,17 +237,12 @@ export const chatCommand = writable(null);
 
 /** When set, ChatInput inserts this text into the input (then clears). Used by suggestion buttons. */
 export const insertIntoInput = writable('');
-/** When set, ChatInput appends this text to the input (then clears). Used by quick-prompt chips. */
-export const insertAppend = writable('');
 
 /** When true, the next Send will run a web search (DuckDuckGo) with the message text, then send. Toggle via globe button. */
 export const webSearchForNextMessage = writable(false);
 
 /** True while a web search is in progress (DuckDuckGo fetch). Show "Searching the web..." UI. */
 export const webSearchInProgress = writable(false);
-
-/** When set, ChatInput shows elaboration options below the input. { baseText: string, options: string[] } */
-export const suggestionExpanded = writable(null);
 
 /** Last response metrics for header (set when a response completes) */
 export const lastResponseTokPerSec = writable(null);
@@ -261,12 +256,6 @@ export const tokSeries = writable([]);
 
 /** Hardware metrics from Python bridge (localhost:5000): cpu_percent, ram_*, gpu_util, vram_*. Null when bridge offline. */
 export const hardwareMetrics = writable(null);
-
-/** Dynamic UI: Performance mode disables gradient bg and heavy animations. */
-export const performanceMode = writable(readBool('performanceMode', false));
-if (typeof localStorage !== 'undefined') {
-  performanceMode.subscribe((v) => localStorage.setItem('performanceMode', v ? '1' : '0'));
-}
 
 /** Arena: number of model panels to show (1–4). Only this many slots/panels are shown. Saved to localStorage. */
 const arenaPanelCountStored = () => {
@@ -326,9 +315,6 @@ if (typeof localStorage !== 'undefined') {
   floatingMetricsSize.subscribe(saveFloatingMetrics);
 }
 
-/** Brief flash when a response completes (green). Set by ChatView, cleared after 400ms. */
-export const responseCompleteFlash = writable(false);
-
 export function pushTokSample(rate) {
   const r = Number(rate);
   if (!Number.isFinite(r)) return;
@@ -339,20 +325,3 @@ export function pushTokSample(rate) {
     return next;
   });
 }
-
-export function resetTokSeries() {
-  liveTokPerSec.set(null);
-  tokSeries.set([]);
-}
-
-/** Resolved dark class for document (for Tailwind dark mode) */
-export const darkClass = derived(theme, ($theme) => {
-  if (typeof document === 'undefined') return '';
-  if ($theme === 'dark') return 'dark';
-  if ($theme === 'light') return '';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : '';
-});
-
-// Chat state stores
-export const messages = writable([]);
-export const currentResponse = writable('');

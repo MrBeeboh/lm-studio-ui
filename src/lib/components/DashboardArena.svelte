@@ -127,7 +127,6 @@
         signal: controller.signal,
         onDone() {
           setRunning(slot, false);
-          if (typeof console !== 'undefined' && console.log) console.log('[DashboardArena] Stream completed (onDone), slot', slot);
           onStreamDone?.();
         },
         onChunk(chunk) {
@@ -206,7 +205,6 @@
     const currentRun = runId;
     liveTokens.set(0);
     isStreaming.set(true);
-    if (typeof console !== 'undefined' && console.log) console.log('[DashboardArena] Stream started, slots:', selected.length);
     let streamDoneCount = 0;
     const onStreamDone = () => {
       streamDoneCount += 1;
@@ -214,7 +212,6 @@
         isStreaming.set(false);
         liveTokens.set(null);
         liveTokPerSec.set(null);
-        if (typeof console !== 'undefined' && console.log) console.log('[DashboardArena] All streams completed, isStreaming set to false');
       }
     };
     if (sequential) {

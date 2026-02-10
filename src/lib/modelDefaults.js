@@ -140,7 +140,7 @@ const FAMILY_PATTERNS = [
  * @param {string} modelId - e.g. "Qwen2.5-7B-Instruct-Q4_K_M"
  * @returns {keyof FAMILY_DEFAULTS}
  */
-export function inferFamily(modelId) {
+function inferFamily(modelId) {
   if (!modelId || typeof modelId !== 'string') return 'default';
   const lower = modelId.toLowerCase();
   for (const { key, test } of FAMILY_PATTERNS) {

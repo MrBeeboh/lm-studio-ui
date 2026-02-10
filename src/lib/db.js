@@ -114,5 +114,3 @@ export async function getMessageCount(conversationId) {
 export async function clearMessages(conversationId) {
   await messagesTable.where('conversationId').equals(conversationId).delete();
 }
-
-export default db;

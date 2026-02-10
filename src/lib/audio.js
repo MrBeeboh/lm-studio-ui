@@ -22,11 +22,6 @@ export function primeAudio() {
   ensureContext();
 }
 
-export function setVolume(vol = 0.25) {
-  if (!masterGain) return;
-  masterGain.gain.value = Math.max(0, Math.min(1, Number(vol) || 0));
-}
-
 function canPlay(key, minMs) {
   const now = Date.now();
   const last = lastPlayed.get(key) || 0;
@@ -55,10 +50,6 @@ function playTone({ freq = 880, duration = 0.05, type = 'sine', volume = 0.2, mi
 
 export function playClick(vol = 0.25) {
   playTone({ freq: 1200, duration: 0.03, type: 'sine', volume: vol * 0.35, minInterval: 30 });
-}
-
-export function playSend(vol = 0.25) {
-  playTone({ freq: 520, duration: 0.07, type: 'triangle', volume: vol * 0.6, minInterval: 80 });
 }
 
 export function playComplete(vol = 0.25) {
