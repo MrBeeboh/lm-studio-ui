@@ -268,7 +268,13 @@
     const lastUserMsg = slotsWithResponses[0].msgs.filter((m) => m.role === 'user').pop();
     const promptText = lastUserMsg ? contentToText(lastUserMsg.content) : '';
     const parts = [
-      'You are a judge. Rate each model response below from 1 to 10 (10 = best) and add one short comment. If a response is missing or says "(no response)", rate it 0 and say "No response."',
+      'You are a judge. For each model response below, give a score from 1 to 10 (10 = best) and one short comment.',
+      '',
+      'Output format: write one line per model, exactly like this:',
+      'Model B: 7/10 - your brief comment here',
+      'Model C: 5/10 - your brief comment here',
+      'If a response is missing or says "(no response)", write: Model X: 0/10 - No response.',
+      'Do not use boxes, labels, or extra prose. Just the numbered lines.',
       '',
       '--- ORIGINAL PROMPT ---',
       promptText || '(none)',
