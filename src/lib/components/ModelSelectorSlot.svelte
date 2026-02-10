@@ -41,27 +41,25 @@
     loading = true;
     loadError = null;
     try {
-      const list = await getModels();
+      const list = await Promise.race([
+        getModels(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('Request timed out. Is LM Studio running?')), 12000)),
+      ]);
       const ids = list.map((m) => m.id);
       models.set(ids.map((id) => ({ id })));
       ensureModelIcons(ids);
     } catch (e) {
       loadError = e?.message || 'Could not load models';
-      models.set([]);
+      if ($models.length === 0) models.set([]);
     } finally {
       loading = false;
     }
   }
 
-  $effect(() => {
-    $lmStudioBaseUrl;
-    loadModels();
-  });
-
   function toggle() {
     const willOpen = !open;
     open = willOpen;
-    if (willOpen) loadModels();
+    if (willOpen && $models.length === 0) loadModels();
   }
 
   function getStore() {
