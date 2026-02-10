@@ -18,8 +18,18 @@ export const hardware = writable(
   typeof navigator !== 'undefined' ? detectHardware() : { cpuLogicalCores: 4 }
 );
 
-/** Selected model id */
-export const selectedModelId = writable('');
+/** Selected model id (persisted to localStorage as 'selectedModel') */
+const getStoredSelectedModel = () =>
+  (typeof localStorage !== 'undefined' ? localStorage.getItem('selectedModel') : null) || '';
+export const selectedModelId = writable(getStoredSelectedModel());
+if (typeof localStorage !== 'undefined') {
+  selectedModelId.subscribe((v) => {
+    if (v) localStorage.setItem('selectedModel', v);
+  });
+}
+
+/** Brief message when previous model was unavailable and we fell back (e.g. "Previous model unavailable, selected X") */
+export const modelSelectionNotification = writable(null);
 
 /** UI: sidebar open on mobile */
 export const sidebarOpen = writable(false);

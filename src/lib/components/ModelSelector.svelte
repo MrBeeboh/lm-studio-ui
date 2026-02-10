@@ -1,10 +1,11 @@
 <script>
   import { tick } from 'svelte';
-  import { models, selectedModelId, updateSettings, hardware, presetDefaultModels, lmStudioBaseUrl } from '$lib/stores.js';
+  import { models, selectedModelId, updateSettings, hardware, presetDefaultModels, lmStudioBaseUrl, modelSelectionNotification } from '$lib/stores.js';
   import { getModels } from '$lib/api.js';
   import { getModelIcon, getQuantization, ensureModelIcons, modelIconOverrides } from '$lib/modelIcons.js';
   import { getDefaultsForModel } from '$lib/modelDefaults.js';
   import { getRecommendedFromHf } from '$lib/huggingface.js';
+  import { findSmallestModel } from '$lib/utils/modelSelection.js';
 
   let open = $state(false);
   let triggerEl = $state(null);
@@ -61,16 +62,35 @@
       const ids = list.map((m) => m.id);
       models.set(ids.map((id) => ({ id })));
       ensureModelIcons(ids);
-      if (list.length && !$selectedModelId) {
-        const presetOrder = ['General', 'Code', 'Research', 'Creative'];
-        const defaultId = presetOrder.map((name) => $presetDefaultModels[name]).find((id) => id && ids.includes(id));
-        const initial = defaultId ?? list[0].id;
-        selectedModelId.set(initial);
-        await applyDefaultsForModel(initial);
+
+      if (list.length === 0) {
+        modelSelectionNotification.set('No models available. Please load a model in LM Studio.');
+        return;
+      }
+      modelSelectionNotification.set(null);
+
+      const stored = typeof localStorage !== 'undefined' ? (localStorage.getItem('selectedModel') || '') : '';
+      const storedValid = typeof stored === 'string' && stored.trim() && ids.includes(stored.trim());
+
+      if (storedValid) {
+        selectedModelId.set(stored.trim());
+        await applyDefaultsForModel(stored.trim());
+        return;
+      }
+
+      const smallest = findSmallestModel(ids);
+      if (smallest) {
+        selectedModelId.set(smallest);
+        await applyDefaultsForModel(smallest);
+        if (stored.trim()) {
+          modelSelectionNotification.set(`Previous model unavailable, selected ${smallest}`);
+          setTimeout(() => modelSelectionNotification.set(null), 5000);
+        }
       }
     } catch (e) {
       console.warn('LM Studio models:', e);
       models.set([]);
+      modelSelectionNotification.set('Cannot connect to LM Studio. Please ensure server is running.');
     }
   }
 
@@ -81,6 +101,7 @@
 
   async function select(id) {
     selectedModelId.set(id);
+    modelSelectionNotification.set(null);
     await applyDefaultsForModel(id);
     open = false;
   }
@@ -90,7 +111,8 @@
   }
 </script>
 
-<div class="flex items-center gap-2">
+<div class="flex flex-col gap-1 min-w-0">
+  <div class="flex items-center gap-2">
   <div class="relative" role="combobox" aria-expanded={open} aria-haspopup="listbox" aria-controls="model-listbox" aria-label="Select model" bind:this={triggerEl}>
     <button
       type="button"
@@ -136,5 +158,11 @@
   </div>
   {#if $selectedModelId && getQuantization($selectedModelId)}
     <span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-600 text-zinc-600 dark:text-zinc-400 shrink-0" title="Quantization">{getQuantization($selectedModelId)}</span>
+  {/if}
+  </div>
+  {#if $modelSelectionNotification}
+    <p class="text-[10px] truncate max-w-full" style="color: var(--ui-text-secondary);" title={$modelSelectionNotification}>
+      {$modelSelectionNotification}
+    </p>
   {/if}
 </div>
