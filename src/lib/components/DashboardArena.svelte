@@ -257,6 +257,7 @@
       chatError.set('Select a model in Slot A to use as judge.');
       return;
     }
+    const feedback = typeof judgeFeedback === 'string' ? judgeFeedback.trim() : '';
     const n = get(arenaPanelCount);
     const slotsWithResponses = [
       n >= 2 && messagesB.length ? { slot: 'B', msgs: messagesB } : null,
@@ -269,18 +270,15 @@
     }
     const lastUserMsg = slotsWithResponses[0].msgs.filter((m) => m.role === 'user').pop();
     const promptText = lastUserMsg ? contentToText(lastUserMsg.content) : '';
-    const feedbackBlock = judgeFeedback.trim()
-      ? `User correction or feedback (use this to correct your evaluation):\n${judgeFeedback.trim()}\n\n`
-      : '';
     const parts = [
-      feedbackBlock,
-      'You are a judge. For each model response below, give a score from 1 to 10 (10 = best) and one short comment.',
+      'You are a judge. Score each model response 1-10 (10 = best) with one short reason (right or wrong).',
       '',
-      'Output format: write one line per model, exactly like this:',
-      'Model B: 7/10 - your brief comment here',
-      'Model C: 5/10 - your brief comment here',
-      'If a response is missing or says "(no response)", write: Model X: 0/10 - No response.',
-      'Do not use boxes, labels, or extra prose. Just the numbered lines.',
+      'RULES: Your entire reply must be ONLY these lines—nothing else. No reasoning, no preamble, no <think>, no revisiting or comparing. Start directly with the first Model line.',
+      '',
+      'Format (one line per model):',
+      'Model B: 7/10 - one short sentence why right or wrong',
+      'Model C: 5/10 - one short sentence why right or wrong',
+      'If a response is missing: Model X: 0/10 - No response.',
       '',
       '--- ORIGINAL PROMPT ---',
       promptText || '(none)',
@@ -291,7 +289,16 @@
       const text = lastAssistant ? contentToText(lastAssistant.content) : '';
       parts.push(`--- MODEL ${slot} ---`, text.trim() || '(no response)', '');
     }
-    const judgePrompt = parts.filter(Boolean).join('\n');
+    const userContent = parts.join('\n');
+    const messages = feedback
+      ? [
+          {
+            role: 'system',
+            content: `You are a judge. Use the user correction below when scoring. Your reply must be ONLY the score lines (Model B: X/10 - comment, etc.). No reasoning, no <think>, no other text.\n\nUser correction:\n${feedback}`,
+          },
+          { role: 'user', content: userContent },
+        ]
+      : [{ role: 'user', content: userContent }];
     chatError.set(null);
     setRunning('A', true);
     setSlotError('A', '');
@@ -310,7 +317,7 @@
     try {
       await streamChatCompletion({
         model: judgeId,
-        messages: [{ role: 'user', content: judgePrompt }],
+        messages,
         options: {
           temperature: $settings.temperature,
           max_tokens: $settings.max_tokens,
