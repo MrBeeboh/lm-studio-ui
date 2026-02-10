@@ -1,0 +1,2 @@
+# For metrics_server.py (VRAM/DRAM for floating metrics panel)
+psutil>=2.0.0
