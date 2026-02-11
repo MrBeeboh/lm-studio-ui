@@ -1352,13 +1352,14 @@
         <button type="button" class="h-full px-2.5 text-xs font-medium disabled:opacity-40 transition-opacity" style="color: var(--ui-text-secondary);" disabled={currentQuestionTotal === 0 || currentQuestionNum <= 1} onclick={prevQuestion} aria-label="Previous question">←</button>
         {#if currentQuestionTotal > 0}
           <select
-            class="h-full min-w-[4.5rem] pl-2 pr-7 text-xs font-semibold tabular-nums border-l border-r bg-transparent cursor-pointer"
+            class="h-full min-w-[4.5rem] max-w-[14rem] pl-2 pr-7 text-xs font-semibold tabular-nums border-l border-r bg-transparent cursor-pointer"
             style="border-color: var(--ui-border); color: var(--ui-text-primary);"
             aria-label="Current question"
             value={currentQuestionNum}
             onchange={(e) => jumpToQuestion(e.currentTarget.value)}>
             {#each Array(currentQuestionTotal) as _, i}
-              <option value={i + 1}>Q{i + 1}</option>
+              {@const qPreview = parsedQuestions[i] ? parsedQuestions[i].slice(0, 50) + (parsedQuestions[i].length > 50 ? '…' : '') : ''}
+              <option value={i + 1}>Q{i + 1}{qPreview ? ': ' + qPreview : ''}</option>
             {/each}
           </select>
           <span class="h-full flex items-center px-2 text-xs tabular-nums" style="color: var(--ui-text-secondary);">/ {currentQuestionTotal}</span>
@@ -1457,6 +1458,17 @@
       </button>
     </div>
   </div>
+
+  <!-- === Sticky question text bar (always visible above panels) === -->
+  {#if currentQuestionTotal > 0 && currentQuestionText}
+    <div
+      class="shrink-0 flex items-center gap-2 px-4 py-1.5 border-b"
+      style="background-color: color-mix(in srgb, var(--ui-accent) 6%, var(--ui-bg-main)); border-color: var(--ui-border);"
+    >
+      <span class="text-xs font-bold tabular-nums shrink-0" style="color: var(--ui-accent);">Q{currentQuestionNum}</span>
+      <span class="text-xs truncate" style="color: var(--ui-text-primary);" title={currentQuestionText}>{currentQuestionText}</span>
+    </div>
+  {/if}
 
   <!-- === Response panels A–D (resizable; panel A header has "Use as judge" checkbox) === -->
   <div
