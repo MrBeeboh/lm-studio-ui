@@ -204,7 +204,7 @@
     } catch (_) {}
     return { x: defaultX, y: defaultY };
   }
-  let questionPanelPos = $state(loadPanelPos('arenaQuestionPanelPos', 16, 400));
+  // questionPanelPos removed — floating question panel no longer needed
   let askJudgePanelPos = $state(loadPanelPos('arenaAskJudgePanelPos', 16, 300));
 
   function loadPanelSize(key, defaultW, defaultH) {
@@ -217,9 +217,7 @@
     } catch (_) {}
     return { w: defaultW, h: defaultH };
   }
-  const QUESTION_PANEL_MIN_W = 200;
-  const QUESTION_PANEL_MIN_H = 80;
-  let questionPanelSize = $state(loadPanelSize('arenaQuestionPanelSize', 360, 200));
+  // questionPanelSize / QUESTION_PANEL_MIN removed — floating question panel no longer needed
 
   /**
    * Svelte action: make the panel draggable by its handle. Handle must be a direct child of the panel.
@@ -1753,62 +1751,7 @@
     </section>
   </div>
 
-  <!-- Draggable + resizable floating panel: current question (only when questions loaded) -->
-  {#if currentQuestionTotal > 0 && currentQuestionText}
-    <div
-      class="arena-floating-panel rounded-lg border shadow-sm flex flex-col"
-      style="position: fixed; left: {questionPanelPos.x}px; top: {questionPanelPos.y}px; z-index: 30; width: {questionPanelSize.w}px; height: {questionPanelSize.h}px; min-width: {QUESTION_PANEL_MIN_W}px; min-height: {QUESTION_PANEL_MIN_H}px; background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);">
-      <div
-        class="arena-floating-handle flex items-center gap-2 px-3 py-2 cursor-grab active:cursor-grabbing select-none shrink-0"
-        style="border-bottom: 1px solid var(--ui-border); color: var(--ui-text-secondary);"
-        use:makeDraggable={{
-          storageKey: 'arenaQuestionPanelPos',
-          getPos: () => questionPanelPos,
-          setPos: (p) => questionPanelPos = p
-        }}
-      >
-        <span class="text-xs font-bold tabular-nums" style="color: var(--ui-accent);">Q{currentQuestionNum}</span>
-        <span class="text-[10px] opacity-80">Drag to move</span>
-      </div>
-      <div class="flex-1 min-h-0 overflow-auto px-3 py-2.5" style="word-wrap: break-word; overflow-wrap: break-word;">
-        <p class="text-sm leading-relaxed" style="color: var(--ui-text-primary);">{currentQuestionText}</p>
-      </div>
-      <!-- Resize handles -->
-      <div
-        class="arena-resize-handle absolute bottom-0 right-0 w-3 h-3 cursor-se-resize"
-        style="background: linear-gradient(135deg, transparent 50%, var(--ui-border) 50%);"
-        use:makeResizable={{
-          storageKey: 'arenaQuestionPanelSize',
-          getSize: () => questionPanelSize,
-          setSize: (s) => questionPanelSize = s,
-          axis: 'se'
-        }}
-        aria-label="Resize question panel"
-      ></div>
-      <div
-        class="arena-resize-handle absolute top-0 bottom-0 right-0 w-1.5 cursor-ew-resize"
-        style="background: transparent;"
-        use:makeResizable={{
-          storageKey: 'arenaQuestionPanelSize',
-          getSize: () => questionPanelSize,
-          setSize: (s) => questionPanelSize = s,
-          axis: 'e'
-        }}
-        aria-label="Resize width"
-      ></div>
-      <div
-        class="arena-resize-handle absolute bottom-0 left-0 right-0 h-1.5 cursor-ns-resize"
-        style="background: transparent;"
-        use:makeResizable={{
-          storageKey: 'arenaQuestionPanelSize',
-          getSize: () => questionPanelSize,
-          setSize: (s) => questionPanelSize = s,
-          axis: 's'
-        }}
-        aria-label="Resize height"
-      ></div>
-    </div>
-  {/if}
+  <!-- Floating question panel removed: question now shows cleanly in each slot's chat bubble -->
 
   <!-- Draggable floating panel: Ask the Judge (only when slot A is judge) -->
   {#if $arenaSlotAIsJudge}
