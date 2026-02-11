@@ -383,8 +383,19 @@
   .chat-input-container {
     position: relative;
     display: flex;
+    align-items: flex-start;
     gap: 12px;
     padding: 16px;
+  }
+
+  .chat-input-container > .attach-button,
+  .chat-input-container > .mic-button,
+  .chat-input-container > .web-search-button,
+  .chat-input-container > .send-button {
+    flex-shrink: 0;
+    height: 44px;
+    min-height: 44px;
+    align-self: flex-start;
   }
 
   textarea {
