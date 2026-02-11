@@ -379,7 +379,7 @@
     font-family: inherit;
     font-size: 14px;
     resize: none;
-    min-height: 44px;
+    min-height: 60px;
     max-height: 200px;
     overflow-y: auto;
     background-color: var(--ui-input-bg, #fff);

@@ -22,6 +22,7 @@
   import FloatingMetricsDashboard from '$lib/components/FloatingMetricsDashboard.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
   import ShortcutsModal from '$lib/components/ShortcutsModal.svelte';
+  import AtomLogo from '$lib/components/AtomLogo.svelte';
   import { checkLmStudioConnection } from '$lib/api.js';
 
   const LAYOUT_OPTS = [
@@ -115,7 +116,7 @@
   {#if $layout === 'cockpit'}
     <div class="flex h-full flex-col">
       <header class="shrink-0 flex items-center flex-wrap px-3 py-2 border-b text-sm" style="border-color: var(--ui-border); background-color: var(--ui-bg-sidebar); color: var(--ui-text-secondary); {HEADER_GAP}">
-        <span class="font-semibold shrink-0 w-10" style="color: var(--ui-accent);">ATOM</span>
+        <span class="flex items-center gap-1.5 font-semibold shrink-0" style="color: var(--ui-accent);"><AtomLogo size={20} />ATOM</span>
         <nav class="flex items-center gap-0.5 shrink-0" aria-label="Layout">
           {#each LAYOUT_OPTS as opt}
             <button type="button" class="px-2 py-1 rounded text-xs {$layout === opt.value ? 'font-medium' : ''}" style="color: {$layout === opt.value ? 'var(--ui-accent)' : 'var(--ui-text-secondary)'}; background: {$layout === opt.value ? 'color-mix(in srgb, var(--ui-accent) 15%, transparent)' : 'transparent'};" onclick={() => layout.set(opt.value)}>{opt.label}</button>
@@ -182,7 +183,7 @@
       <header class="shrink-0 flex items-center justify-between px-3 py-2 border-b flex-wrap" style="border-color: var(--ui-border); background-color: var(--ui-bg-sidebar); {HEADER_GAP}">
         <div class="flex items-center gap-2 shrink-0">
           <button type="button" class="md:hidden p-2 rounded min-h-[44px] min-w-[44px] flex items-center justify-center" style="color: var(--ui-text-secondary);" onclick={() => sidebarOpen.set(true)} aria-label="Open menu">☰</button>
-          <span class="font-semibold shrink-0" style="color: var(--ui-accent);">ATOM Arena</span>
+          <span class="flex items-center gap-1.5 font-semibold shrink-0" style="color: var(--ui-accent);"><AtomLogo size={20} />ATOM Arena</span>
         </div>
         <nav class="flex items-center gap-0.5 shrink-0" aria-label="Layout">
           {#each LAYOUT_OPTS as opt}

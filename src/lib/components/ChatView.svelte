@@ -7,6 +7,7 @@
   import { searchDuckDuckGo, formatSearchResultForChat } from '$lib/duckduckgo.js';
   import MessageList from '$lib/components/MessageList.svelte';
   import ChatInput from '$lib/components/ChatInput.svelte';
+  import AtomLogo from '$lib/components/AtomLogo.svelte';
   import { generateId, resizeImageDataUrlsForVision, shouldSkipImageResizeForVision } from '$lib/utils.js';
 
   const convId = $derived($activeConversationId);
@@ -153,31 +154,18 @@
 >
   {#if convId}
     {#if $activeMessages.length === 0}
-      <!-- Perplexity-style: centered start-chat with input in the middle, generous width so placeholder fits -->
-      <div class="flex-1 flex flex-col items-center justify-center px-4 py-8 min-h-0">
+      <!-- Greeting: ATOM branding, headline, gradient divider, input (power-user tone) -->
+      <div class="ui-splash-wrap flex-1 flex flex-col items-center justify-center px-4 py-8 min-h-0">
         <div class="w-full max-w-[min(700px,92%)] mx-auto flex flex-col items-center">
-          <h1 class="ui-greeting-title text-2xl md:text-3xl font-semibold mb-6 text-center" style="color: var(--ui-text-primary);">What can I help with?</h1>
-          <div class="flex flex-wrap justify-center gap-2 mb-6">
-            {#each ['Explain this concept simply', 'Write a short story', 'Help me debug code', 'Summarize in 3 bullet points'] as suggestion}
-              <button
-                type="button"
-                class="px-4 py-2 rounded-lg text-sm border transition-colors hover:opacity-90 min-h-[44px]"
-                style="border-color: var(--ui-border); color: var(--ui-text-secondary); background: var(--ui-input-bg);"
-                onclick={() => sendUserMessage(suggestion)}
-              >{suggestion}</button>
-            {/each}
-          </div>
+          <div class="ui-splash-branding flex items-center justify-center gap-2 mb-2" aria-hidden="true"><AtomLogo size={32} /><span>ATOM</span></div>
+          <h1 class="ui-greeting-title text-2xl md:text-3xl font-semibold mb-8 text-center" style="color: var(--ui-text-primary);">What can I help with?</h1>
           {#if $chatError}
             <div class="mb-4 w-full px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm flex items-center justify-between gap-2">
               <span>{$chatError}</span>
               <button type="button" class="shrink-0 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30" onclick={() => chatError.set(null)} aria-label="Dismiss">×</button>
             </div>
           {/if}
-          <div class="ui-splash-divider my-6 w-full max-w-[min(700px,92%)]" aria-hidden="true">
-            <span class="ui-splash-divider-line"></span>
-            <span class="ui-splash-divider-icon" aria-hidden="true">✦</span>
-            <span class="ui-splash-divider-line"></span>
-          </div>
+          <div class="ui-splash-divider mb-6 w-full max-w-[min(700px,92%)]" aria-hidden="true"></div>
           <div class="w-full min-w-0">
             <ChatInput
               onSend={sendUserMessage}
