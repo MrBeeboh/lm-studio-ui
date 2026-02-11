@@ -50,25 +50,87 @@
     if (typeof localStorage !== 'undefined' && contestRules !== undefined)
       localStorage.setItem('arenaContestRules', contestRules);
   });
-  /** Questions list: paste numbered questions (1. ... 2. ...). Next question posts the next one. Persisted. */
-  let questionsList = $state(
-    typeof localStorage !== 'undefined' ? (localStorage.getItem('arenaQuestionsList') ?? '') : ''
-  );
+  /**
+   * Single "Questions & answers" block. Format:
+   *   1. Question text here
+   *   Answer: Optional answer for the judge (if omitted, judge uses web or own knowledge).
+   *   2. Next question
+   *   Answer: Next answer
+   * Persisted. Parsed into questions[] and answers[] (per-question; answers[i] may be '').
+   */
+  function loadQuestionsAndAnswers() {
+    if (typeof localStorage === 'undefined') return '';
+    const next = localStorage.getItem('arenaQuestionsAndAnswers');
+    if (next != null && next !== '') return next;
+    const oldQ = localStorage.getItem('arenaQuestionsList') ?? '';
+    const oldA = localStorage.getItem('arenaAnswerKey') ?? '';
+    if (oldQ.trim() === '' && oldA.trim() === '') return '';
+    if (oldQ.trim() === '') return '';
+    const qLines = oldQ.split(/\n/).filter((s) => s.trim().length > 0);
+    const aLines = oldA.split(/\n/).filter((s) => s.trim().length > 0);
+    const merged = qLines
+      .map((line, i) => {
+        const num = i + 1;
+        const q = line.replace(/^\s*\d+[.)]\s*/, '').trim();
+        const a = aLines[i] != null ? aLines[i].replace(/^\s*\d+[.)]\s*/, '').trim() : '';
+        return a ? `${num}. ${q}\nAnswer: ${a}` : `${num}. ${q}`;
+      })
+      .join('\n\n');
+    return merged;
+  }
+  let questionsAndAnswers = $state(loadQuestionsAndAnswers());
   let questionIndex = $state(0);
   $effect(() => {
-    if (typeof localStorage !== 'undefined' && questionsList !== undefined)
-      localStorage.setItem('arenaQuestionsList', questionsList);
+    if (typeof localStorage !== 'undefined' && questionsAndAnswers !== undefined)
+      localStorage.setItem('arenaQuestionsAndAnswers', questionsAndAnswers);
   });
-  /** Parse pasted text into array of question strings (strip "1." "2." "1)" etc.). */
-  function parseNumberedQuestions(text) {
-    if (!text || typeof text !== 'string') return [];
-    return text
-      .split(/\n/)
-      .map((line) => line.replace(/^\s*\d+[.)]\s*/, '').trim())
-      .filter((s) => s.length > 0);
+
+  /**
+   * Parse "Questions & answers" text into { questions, answers }.
+   * Blocks are split by lines starting with a number (1. or 2) etc.).
+   * Within a block, an optional "Answer:" line starts the answer; rest is question.
+   * If no Answer: is given for a question, answers[i] is '' (judge uses web or own knowledge).
+   */
+  function parseQuestionsAndAnswers(text) {
+    if (!text || typeof text !== 'string') return { questions: [], answers: [] };
+    const blocks = text.split(/\n\s*(?=\d+[.)]\s*)/).filter((b) => b.trim().length > 0);
+    const questions = [];
+    const answers = [];
+    for (const block of blocks) {
+      const lines = block.split(/\n/);
+      const first = lines[0] || '';
+      const numberStripped = first.replace(/^\s*\d+[.)]\s*/, '').trim();
+      let questionLines = [];
+      let answerLines = [];
+      let foundAnswer = false;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (/^\s*Answer:\s*/i.test(line)) {
+          foundAnswer = true;
+          answerLines.push(line.replace(/^\s*Answer:\s*/i, '').trim());
+          for (let j = i + 1; j < lines.length; j++) answerLines.push(lines[j]);
+          break;
+        }
+        if (i === 0) questionLines.push(numberStripped);
+        else questionLines.push(line);
+      }
+      const q = questionLines.join('\n').trim();
+      const a = answerLines.join('\n').trim();
+      if (q.length > 0) {
+        questions.push(q);
+        answers.push(a);
+      }
+    }
+    return { questions, answers };
   }
-  const parsedQuestions = $derived(parseNumberedQuestions(questionsList));
-  /** Current question index for display (1-based) and text for the prominent question box. */
+
+  const { questions: parsedQuestions, answers: parsedAnswers } = $derived(parseQuestionsAndAnswers(questionsAndAnswers));
+  /** Answer for the current question only (blank if none provided → judge uses web or own knowledge). */
+  const currentQuestionAnswer = $derived(
+    parsedQuestions.length > 0 && parsedAnswers.length > 0
+      ? (parsedAnswers[questionIndex % parsedQuestions.length] || '').trim()
+      : ''
+  );
   const currentQuestionNum = $derived(parsedQuestions.length > 0 ? (questionIndex % parsedQuestions.length) + 1 : 0);
   const currentQuestionTotal = $derived(parsedQuestions.length);
   const currentQuestionText = $derived(
@@ -76,14 +138,6 @@
   );
   /** Arena settings panel (slide-out from right). */
   let arenaSettingsOpen = $state(false);
-  /** Answer key for judge (optional). Persisted to localStorage. */
-  let answerKey = $state(
-    typeof localStorage !== 'undefined' ? (localStorage.getItem('arenaAnswerKey') ?? '') : ''
-  );
-  $effect(() => {
-    if (typeof localStorage !== 'undefined' && answerKey !== undefined)
-      localStorage.setItem('arenaAnswerKey', answerKey);
-  });
   // ---------- Web globe (same behavior as cockpit ChatInput globe) ----------
   let arenaWebWarmingUp = $state(false);
   let arenaWebWarmUpAttempted = $state(false);
@@ -345,6 +399,14 @@
     { name: 'Code', prompt: 'You are an expert programmer. Be concise. Prefer code over prose when relevant.' },
     { name: 'Research', prompt: 'You are a thorough researcher. Cite sources when possible. Structure answers with clear sections.' },
     { name: 'Creative', prompt: 'You are a creative writer. Use vivid language and varied structure. Be engaging and original.' },
+    {
+      name: 'Arena contestant',
+      prompt: 'You are a contestant in a competition against other AI models. You will receive questions and contest rules. You must strictly adhere to the rules; breaking them (e.g. going over the allowed line count, ignoring format, or violating instructions) can result in a score of zero. Answer each question concisely, accurately, and within the stated constraints. Do not acknowledge the competition in your answer—just answer the question.',
+    },
+    {
+      name: 'Arena judge',
+      prompt: 'You are the judge in an AI model competition. You will receive the question, an optional answer key, and each competing model\'s response. Score each response 1–10 (10 = best) with one short reason, based on accuracy and adherence to the answer key (or your own knowledge if no key is provided). Your reply must contain only the score lines (e.g. Model B: 7/10 - reason). No preamble, no <think>, no lengthy analysis—just the scores.',
+    },
   ];
   function applySystemPromptTemplate(slot, templatePrompt) {
     if (!templatePrompt) return;
@@ -846,7 +908,7 @@
         webSearchInProgress.set(false);
       }
     }
-    const answerKeyTrimmed = typeof answerKey === 'string' ? answerKey.trim() : '';
+    const answerKeyTrimmed = currentQuestionAnswer;
     const competingSlots = slotsWithResponses.map((s) => s.slot);
     const competingList = competingSlots.join(', ');
     const firstSlot = competingSlots[0] || 'B';
@@ -1011,12 +1073,12 @@
       'You are a judge in a model arena competition. You were given an answer key and contest rules (see below) to use when scoring. The user may ask you about your scoring, the answer key, or how you use it. Answer thoughtfully and concisely; do NOT re-score.',
       '',
     ];
-    // Answer key (Arena settings → Answer Key) — same as in Judgment run
-    const answerKeyTrimmed = typeof answerKey === 'string' ? answerKey.trim() : '';
-    if (answerKeyTrimmed) {
-      contextParts.push('--- ANSWER KEY (use this to evaluate accuracy; it was provided to you when you scored) ---', answerKeyTrimmed, '');
+    // Answer for current question (if any); otherwise judge used web or own knowledge
+    const answerForQuestion = currentQuestionAnswer;
+    if (answerForQuestion) {
+      contextParts.push('--- ANSWER KEY (use this to evaluate accuracy; it was provided to you when you scored) ---', answerForQuestion, '');
     } else {
-      contextParts.push('--- ANSWER KEY ---', '(None provided for this competition.)', '');
+      contextParts.push('--- ANSWER KEY ---', '(None provided for this question; you used web or your own knowledge.)', '');
     }
     // Contest rules (Arena settings)
     const rulesTrimmed = typeof contestRules === 'string' ? contestRules.trim() : '';
@@ -1036,7 +1098,7 @@
     }
     contextParts.push('--- USER QUESTION ---', askJudgeQuestion.trim());
 
-    const systemContent = answerKeyTrimmed
+    const systemContent = answerForQuestion
       ? 'You are a competition judge. You have been given the answer key and (if any) contest rules in the user message. Use them when answering questions about your scoring. Do NOT re-score — just explain your reasoning.'
       : 'You are a competition judge. Answer the user\'s question about your scoring thoughtfully and concisely. Do NOT re-score — just explain your reasoning.';
 
@@ -1776,41 +1838,30 @@
           <button type="button" class="p-2 rounded-lg hover:opacity-80" style="color: var(--ui-text-secondary);" onclick={() => arenaSettingsOpen = false} aria-label="Close">×</button>
         </div>
         <div class="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-          <!-- 1. Questions – first: this is what you run the contest with -->
+          <!-- 1. Questions & answers (one block: optional Answer: per question) -->
           <section>
-            <h3 class="font-semibold text-sm mb-1" style="color: var(--ui-text-primary);">Questions</h3>
-            <p class="text-xs mb-3" style="color: var(--ui-text-secondary);">Paste your contest questions here. Number them (1. … 2. … or 1) … 2) …). They drive the Q1–Q20 selector and the Ask button.</p>
+            <h3 class="font-semibold text-sm mb-1" style="color: var(--ui-text-primary);">Questions & answers</h3>
+            <p class="text-xs mb-3" style="color: var(--ui-text-secondary);">Paste questions and optional answers in one place. Number each question (1. … 2. …). Add a line <strong>Answer: …</strong> under a question to give the judge that answer for scoring. If you omit Answer: for a question, the judge uses web (if on) or its own knowledge.</p>
             <textarea
-              id="arena-questions-list-settings"
-              class="w-full rounded-md resize-y text-[13px]"
-              style="padding: 12px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 160px;"
-              placeholder="1. First question text here
-2. Second question
-3. Third question
-..."
-              rows="8"
-              bind:value={questionsList}
+              id="arena-questions-and-answers-settings"
+              class="w-full rounded-md resize-y text-[13px] font-sans"
+              style="padding: 12px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 220px;"
+              placeholder="1. What is the primary function of a differential?
+Answer: To allow the drive wheels to rotate at different speeds (e.g. when turning).
+
+2. Who built the first practical steam engine?
+Answer: Thomas Newcomen.
+
+3. Question with no answer (judge uses web or own knowledge)"
+              rows="12"
+              bind:value={questionsAndAnswers}
             ></textarea>
             {#if parsedQuestions.length > 0}
-              <p class="text-[11px] mt-1.5 font-medium" style="color: var(--ui-accent);">{parsedQuestions.length} question{parsedQuestions.length === 1 ? '' : 's'} loaded</p>
+              {@const withAnswers = parsedAnswers.filter((a) => (a || '').trim().length > 0).length}
+              <p class="text-[11px] mt-1.5 font-medium" style="color: var(--ui-accent);">{parsedQuestions.length} question{parsedQuestions.length === 1 ? '' : 's'} loaded · {withAnswers} with answers</p>
             {/if}
           </section>
-          <!-- 2. Answer Key (optional, for judge) -->
-          <section>
-            <h3 class="font-semibold text-sm mb-1" style="color: var(--ui-text-primary);">Answer Key</h3>
-            <p class="text-xs mb-3" style="color: var(--ui-text-secondary);">Optional. Judge will use this when scoring. Can also rely on web search or its own knowledge.</p>
-            <textarea
-              id="answer_key_input"
-              class="w-full rounded-md resize-y font-mono text-[13px]"
-              style="padding: 12px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 120px;"
-              placeholder="1. Answer to Q1
-2. Answer to Q2
-..."
-              rows="6"
-              bind:value={answerKey}
-            ></textarea>
-          </section>
-          <!-- 3. Contest rules (accordion, collapsed by default) -->
+          <!-- 2. Contest rules (accordion, collapsed by default) -->
           <section>
             <button
               type="button"
