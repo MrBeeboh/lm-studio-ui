@@ -147,6 +147,20 @@
   let questionPanelPos = $state(loadPanelPos('arenaQuestionPanelPos', 16, 400));
   let askJudgePanelPos = $state(loadPanelPos('arenaAskJudgePanelPos', 16, 300));
 
+  function loadPanelSize(key, defaultW, defaultH) {
+    if (typeof localStorage === 'undefined') return { w: defaultW, h: defaultH };
+    try {
+      const s = localStorage.getItem(key);
+      if (!s) return { w: defaultW, h: defaultH };
+      const { w, h } = JSON.parse(s);
+      if (typeof w === 'number' && typeof h === 'number') return { w, h };
+    } catch (_) {}
+    return { w: defaultW, h: defaultH };
+  }
+  const QUESTION_PANEL_MIN_W = 200;
+  const QUESTION_PANEL_MIN_H = 80;
+  let questionPanelSize = $state(loadPanelSize('arenaQuestionPanelSize', 360, 200));
+
   /**
    * Svelte action: make the panel draggable by its handle. Handle must be a direct child of the panel.
    * Updates getPos/setPos and persists to localStorage on drag end; clamps to viewport.
@@ -184,6 +198,58 @@
       const p = getPos();
       startLeft = p.x;
       startTop = p.y;
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    }
+    handleEl.addEventListener('pointerdown', down);
+    return {
+      destroy() {
+        handleEl.removeEventListener('pointerdown', down);
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+      },
+    };
+  }
+
+  /**
+   * Svelte action: resize panel by dragging. Handle is on edge or corner.
+   * axis: 'e' = right edge (width), 's' = bottom edge (height), 'se' = corner (both).
+   */
+  function makeResizable(handleEl, params) {
+    if (!params || !handleEl) return;
+    const { storageKey, getSize, setSize, axis } = params;
+    const panelEl = handleEl.closest('.arena-floating-panel');
+    if (!panelEl) return;
+
+    function move(e) {
+      let { w, h } = getSize();
+      if (axis === 'e' || axis === 'se') {
+        w = Math.max(QUESTION_PANEL_MIN_W, startW + (e.clientX - startX));
+        w = Math.min(window.innerWidth - (panelEl.getBoundingClientRect().left || 0), w);
+      }
+      if (axis === 's' || axis === 'se') {
+        h = Math.max(QUESTION_PANEL_MIN_H, startH + (e.clientY - startY));
+        h = Math.min(window.innerHeight - (panelEl.getBoundingClientRect().top || 0), h);
+      }
+      setSize({ w, h });
+    }
+    function up() {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      if (typeof localStorage !== 'undefined' && storageKey) {
+        const size = getSize();
+        localStorage.setItem(storageKey, JSON.stringify({ w: size.w, h: size.h }));
+      }
+    }
+    let startX, startY, startW, startH;
+    function down(e) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      startX = e.clientX;
+      startY = e.clientY;
+      const sz = getSize();
+      startW = sz.w;
+      startH = sz.h;
       document.addEventListener('pointermove', move);
       document.addEventListener('pointerup', up);
     }
@@ -781,19 +847,25 @@
       }
     }
     const answerKeyTrimmed = typeof answerKey === 'string' ? answerKey.trim() : '';
+    const competingSlots = slotsWithResponses.map((s) => s.slot);
+    const competingList = competingSlots.join(', ');
+    const firstSlot = competingSlots[0] || 'B';
     const parts = [
       'You are a judge. Score each model response 1-10 (10 = best) with one short reason (right or wrong).',
       '',
+      `COMPETING MODELS (authoritative—do not guess): This round has exactly ${competingSlots.length} model(s): ${competingList}. You must output exactly one line for each of these, in this order: ${competingList}. Do not score Model A (the judge). Do not add or mention Model E or any other model. Only ${competingList}. If a model has no response below, write: Model X: 0/10 - No response.`,
+      '',
       answerKeyTrimmed
-        ? 'BASIS FOR SCORING: An ANSWER KEY is provided below. Base your scores on it. Compare each model\'s response to the answer key; scores must reflect how well each response matches or deviates from the answer key.'
+        ? 'BASIS FOR SCORING: An ANSWER KEY is provided below. Use it. Compare each model\'s response to the answer key and score accordingly. Do not overthink—match the response to the key and give a score plus one short reason.'
         : 'BASIS FOR SCORING: No answer key was provided. Use the WEB SEARCH section below (if present) to fact-check, or use your own knowledge to evaluate correctness.',
       '',
-      'RULES: Your entire reply must be ONLY these lines—nothing else. No reasoning, no preamble, no <think>, no revisiting or comparing. Start directly with the first Model line.',
+      answerKeyTrimmed
+        ? `CRITICAL—NO RAMBLING: Do NOT output <think>, chain-of-thought, or any analysis. Do NOT write paragraphs. Your reply must be ONLY the score lines below—nothing before them, nothing after. Start your very first character with "Model ${firstSlot}:". If you write anything before the first Model line, the response is wrong.`
+        : 'RULES: Your entire reply must be ONLY the score lines—no reasoning, no preamble, no <think>. Start directly with the first Model line.',
       '',
-      'Format (one line per model):',
-      'Model B: 7/10 - one short sentence why right or wrong',
-      'Model C: 5/10 - one short sentence why right or wrong',
-      'If a response is missing: Model X: 0/10 - No response.',
+      `Output exactly these lines, in this order (${competingSlots.length} line(s)):`,
+      ...competingSlots.map((slot) => `Model ${slot}: X/10 - one short sentence why right or wrong`),
+      'If a model has no response in the sections below: Model X: 0/10 - No response.',
       '',
     ];
     if (answerKeyTrimmed) {
@@ -809,15 +881,22 @@
       parts.push(`--- MODEL ${slot} ---`, text.trim() || '(no response)', '');
     }
     const userContent = parts.join('\n');
+    const systemWithAnswerKey = answerKeyTrimmed
+      ? `You are a judge. An answer key is provided. Use it. You are scoring exactly ${competingSlots.length} model(s): ${competingList}. Output exactly one line for each, in that order. No other models. No <think>, no chain-of-thought, no analysis. Start with "Model ${firstSlot}:".`
+      : null;
     const messages = feedback
       ? [
           {
             role: 'system',
-            content: `You are a judge. Use the user correction below when scoring. Your reply must be ONLY the score lines (Model B: X/10 - comment, etc.). No reasoning, no <think>, no other text.\n\nUser correction:\n${feedback}`,
+            content: systemWithAnswerKey
+              ? `${systemWithAnswerKey}\n\nUser correction to apply when scoring:\n${feedback}`
+              : `You are a judge. Use the user correction below when scoring. Your reply must be ONLY the score lines (Model B: X/10 - comment, etc.). No reasoning, no <think>, no other text.\n\nUser correction:\n${feedback}`,
           },
           { role: 'user', content: userContent },
         ]
-      : [{ role: 'user', content: userContent }];
+      : systemWithAnswerKey
+        ? [{ role: 'system', content: systemWithAnswerKey }, { role: 'user', content: userContent }]
+        : [{ role: 'user', content: userContent }];
     chatError.set(null);
     setRunning('A', true);
     setSlotError('A', '');
@@ -1561,13 +1640,13 @@
     </section>
   </div>
 
-  <!-- Draggable floating panel: current question (only when questions loaded) -->
+  <!-- Draggable + resizable floating panel: current question (only when questions loaded) -->
   {#if currentQuestionTotal > 0 && currentQuestionText}
     <div
-      class="arena-floating-panel rounded-lg border shadow-sm overflow-hidden"
-      style="position: fixed; left: {questionPanelPos.x}px; top: {questionPanelPos.y}px; z-index: 30; max-width: min(360px, calc(100vw - 2rem)); background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);">
+      class="arena-floating-panel rounded-lg border shadow-sm flex flex-col"
+      style="position: fixed; left: {questionPanelPos.x}px; top: {questionPanelPos.y}px; z-index: 30; width: {questionPanelSize.w}px; height: {questionPanelSize.h}px; min-width: {QUESTION_PANEL_MIN_W}px; min-height: {QUESTION_PANEL_MIN_H}px; background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);">
       <div
-        class="arena-floating-handle flex items-center gap-2 px-3 py-2 cursor-grab active:cursor-grabbing select-none"
+        class="arena-floating-handle flex items-center gap-2 px-3 py-2 cursor-grab active:cursor-grabbing select-none shrink-0"
         style="border-bottom: 1px solid var(--ui-border); color: var(--ui-text-secondary);"
         use:makeDraggable={{
           storageKey: 'arenaQuestionPanelPos',
@@ -1578,9 +1657,43 @@
         <span class="text-xs font-bold tabular-nums" style="color: var(--ui-accent);">Q{currentQuestionNum}</span>
         <span class="text-[10px] opacity-80">Drag to move</span>
       </div>
-      <div class="px-3 py-2.5">
+      <div class="flex-1 min-h-0 overflow-auto px-3 py-2.5" style="word-wrap: break-word; overflow-wrap: break-word;">
         <p class="text-sm leading-relaxed" style="color: var(--ui-text-primary);">{currentQuestionText}</p>
       </div>
+      <!-- Resize handles -->
+      <div
+        class="arena-resize-handle absolute bottom-0 right-0 w-3 h-3 cursor-se-resize"
+        style="background: linear-gradient(135deg, transparent 50%, var(--ui-border) 50%);"
+        use:makeResizable={{
+          storageKey: 'arenaQuestionPanelSize',
+          getSize: () => questionPanelSize,
+          setSize: (s) => questionPanelSize = s,
+          axis: 'se'
+        }}
+        aria-label="Resize question panel"
+      ></div>
+      <div
+        class="arena-resize-handle absolute top-0 bottom-0 right-0 w-1.5 cursor-ew-resize"
+        style="background: transparent;"
+        use:makeResizable={{
+          storageKey: 'arenaQuestionPanelSize',
+          getSize: () => questionPanelSize,
+          setSize: (s) => questionPanelSize = s,
+          axis: 'e'
+        }}
+        aria-label="Resize width"
+      ></div>
+      <div
+        class="arena-resize-handle absolute bottom-0 left-0 right-0 h-1.5 cursor-ns-resize"
+        style="background: transparent;"
+        use:makeResizable={{
+          storageKey: 'arenaQuestionPanelSize',
+          getSize: () => questionPanelSize,
+          setSize: (s) => questionPanelSize = s,
+          axis: 's'
+        }}
+        aria-label="Resize height"
+      ></div>
     </div>
   {/if}
 

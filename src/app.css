@@ -1111,6 +1111,9 @@ body {
 .arena-globe-dot-pulse { animation: arena-globe-dot-pulse 1.2s ease-in-out infinite; }
 @keyframes arena-globe-dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
+/* Arena question panel: resize handles (edge/corner) */
+.arena-resize-handle:hover { background-color: color-mix(in srgb, var(--ui-accent) 30%, transparent) !important; }
+
 /* Streaming: pulsing border glow */
 .atom-streaming-glow {
   animation: atom-streaming-glow 1.5s ease-in-out infinite;
