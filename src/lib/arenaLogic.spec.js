@@ -14,47 +14,227 @@ import {
 
 // ---------- parseQuestionsAndAnswers ----------
 describe('parseQuestionsAndAnswers', () => {
+  // --- Edge cases ---
   it('returns empty arrays for empty input', () => {
     expect(parseQuestionsAndAnswers('')).toEqual({ questions: [], answers: [] });
     expect(parseQuestionsAndAnswers(null)).toEqual({ questions: [], answers: [] });
     expect(parseQuestionsAndAnswers(undefined)).toEqual({ questions: [], answers: [] });
+    expect(parseQuestionsAndAnswers('   \n\n  ')).toEqual({ questions: [], answers: [] });
   });
 
-  it('parses questions without answers', () => {
-    const text = '1. What is 2+2?\n2. Name the capital of France';
-    const result = parseQuestionsAndAnswers(text);
-    expect(result.questions).toEqual(['What is 2+2?', 'Name the capital of France']);
-    expect(result.answers).toEqual(['', '']);
+  // --- Format 1: Numbered interleaved (1. Q\nAnswer: A) ---
+  describe('Format: numbered interleaved', () => {
+    it('parses questions without answers', () => {
+      const text = '1. What is 2+2?\n2. Name the capital of France';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['What is 2+2?', 'Name the capital of France']);
+      expect(result.answers).toEqual(['', '']);
+    });
+
+    it('parses questions with answers', () => {
+      const text = '1. What is 2+2?\nAnswer: 4\n\n2. Capital of France?\nAnswer: Paris';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['What is 2+2?', 'Capital of France?']);
+      expect(result.answers).toEqual(['4', 'Paris']);
+    });
+
+    it('handles mixed (some with answers, some without)', () => {
+      const text = '1. Question one\nAnswer: Answer one\n\n2. Question two\n\n3. Question three\nAnswer: Answer three';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toHaveLength(3);
+      expect(result.answers[0]).toBe('Answer one');
+      expect(result.answers[1]).toBe('');
+      expect(result.answers[2]).toBe('Answer three');
+    });
+
+    it('handles parenthetical numbering (1) instead of 1.)', () => {
+      const text = '1) What is water?\nAnswer: H2O\n\n2) What is fire?';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['What is water?', 'What is fire?']);
+      expect(result.answers).toEqual(['H2O', '']);
+    });
+
+    it('handles multi-line answers', () => {
+      const text = '1. Explain gravity\nAnswer: Gravity is a force.\nIt pulls objects together.';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.answers[0]).toContain('Gravity is a force.');
+      expect(result.answers[0]).toContain('It pulls objects together.');
+    });
+
+    it('handles Windows \\r\\n line endings', () => {
+      const text = '1. What is the SI unit of current?\r\nAnswer: Ampere\r\n\r\n2. What force carries light?\r\nAnswer: Electromagnetic force';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toHaveLength(2);
+      expect(result.questions[0]).toBe('What is the SI unit of current?');
+      expect(result.questions[1]).toBe('What force carries light?');
+      expect(result.answers[0]).toBe('Ampere');
+      expect(result.answers[1]).toBe('Electromagnetic force');
+    });
+
+    it('handles multiple blank lines between questions', () => {
+      const text = '1. Q one\nAnswer: A one\n\n\n\n2. Q two\nAnswer: A two\n\n\n3. Q three';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toHaveLength(3);
+      expect(result.answers[0]).toBe('A one');
+      expect(result.answers[1]).toBe('A two');
+    });
+
+    it('handles trailing whitespace on blank lines', () => {
+      const text = '1. Q one\nAnswer: A one\n   \n2. Q two\nAnswer: A two';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toHaveLength(2);
+    });
   });
 
-  it('parses questions with answers', () => {
-    const text = '1. What is 2+2?\nAnswer: 4\n\n2. Capital of France?\nAnswer: Paris';
-    const result = parseQuestionsAndAnswers(text);
-    expect(result.questions).toEqual(['What is 2+2?', 'Capital of France?']);
-    expect(result.answers).toEqual(['4', 'Paris']);
+  // --- Format 2: Q/A labeled ---
+  describe('Format: Q/A labeled', () => {
+    it('parses Q: / A: format', () => {
+      const text = 'Q: What is 2+2?\nA: 4\n\nQ: Capital of France?\nA: Paris';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['What is 2+2?', 'Capital of France?']);
+      expect(result.answers).toEqual(['4', 'Paris']);
+    });
+
+    it('parses Question: / Answer: format', () => {
+      const text = 'Question: What is water?\nAnswer: H2O\n\nQuestion: What is fire?\nAnswer: Combustion';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['What is water?', 'What is fire?']);
+      expect(result.answers).toEqual(['H2O', 'Combustion']);
+    });
+
+    it('handles Q/A without blank lines between pairs', () => {
+      const text = 'Q: First question\nA: First answer\nQ: Second question\nA: Second answer';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['First question', 'Second question']);
+      expect(result.answers).toEqual(['First answer', 'Second answer']);
+    });
+
+    it('handles Q: without A: (no answers)', () => {
+      const text = 'Q: First\nQ: Second\nQ: Third';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toHaveLength(3);
+      expect(result.answers).toEqual(['', '', '']);
+    });
   });
 
-  it('handles mixed questions (some with answers, some without)', () => {
-    const text = '1. Question one\nAnswer: Answer one\n\n2. Question two\n\n3. Question three\nAnswer: Answer three';
-    const result = parseQuestionsAndAnswers(text);
-    expect(result.questions).toHaveLength(3);
-    expect(result.answers[0]).toBe('Answer one');
-    expect(result.answers[1]).toBe('');
-    expect(result.answers[2]).toBe('Answer three');
+  // --- Format 3: Separate blocks ---
+  describe('Format: separate question and answer blocks', () => {
+    it('parses Questions: / Answers: sections', () => {
+      const text = 'Questions:\n1. What is 2+2?\n2. Capital of France?\n\nAnswers:\n1. 4\n2. Paris';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['What is 2+2?', 'Capital of France?']);
+      expect(result.answers).toEqual(['4', 'Paris']);
+    });
+
+    it('parses Answer Key: header', () => {
+      const text = '1. What is water?\n2. What is fire?\n\nAnswer Key:\n1. H2O\n2. Combustion';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['What is water?', 'What is fire?']);
+      expect(result.answers).toEqual(['H2O', 'Combustion']);
+    });
+
+    it('handles fewer answers than questions', () => {
+      const text = 'Questions:\n1. Q one\n2. Q two\n3. Q three\n\nAnswers:\n1. A one';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toHaveLength(3);
+      expect(result.answers[0]).toBe('A one');
+      expect(result.answers[1]).toBe('');
+      expect(result.answers[2]).toBe('');
+    });
   });
 
-  it('handles parenthetical numbering (1) instead of 1.)', () => {
-    const text = '1) What is water?\nAnswer: H2O\n\n2) What is fire?';
-    const result = parseQuestionsAndAnswers(text);
-    expect(result.questions).toEqual(['What is water?', 'What is fire?']);
-    expect(result.answers).toEqual(['H2O', '']);
+  // --- Format 4: JSON ---
+  describe('Format: JSON', () => {
+    it('parses JSON array of {question, answer}', () => {
+      const text = JSON.stringify([
+        { question: 'What is 2+2?', answer: '4' },
+        { question: 'Capital of France?', answer: 'Paris' },
+      ]);
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['What is 2+2?', 'Capital of France?']);
+      expect(result.answers).toEqual(['4', 'Paris']);
+    });
+
+    it('parses JSON array of {q, a}', () => {
+      const text = JSON.stringify([
+        { q: 'What is water?', a: 'H2O' },
+        { q: 'What is fire?', a: 'Combustion' },
+      ]);
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['What is water?', 'What is fire?']);
+      expect(result.answers).toEqual(['H2O', 'Combustion']);
+    });
+
+    it('parses JSON with questions only', () => {
+      const text = JSON.stringify([
+        { question: 'Q1' },
+        { question: 'Q2' },
+      ]);
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['Q1', 'Q2']);
+      expect(result.answers).toEqual(['', '']);
+    });
+
+    it('handles pretty-printed JSON', () => {
+      const text = JSON.stringify([
+        { question: 'Q1', answer: 'A1' },
+      ], null, 2);
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['Q1']);
+      expect(result.answers).toEqual(['A1']);
+    });
   });
 
-  it('handles multi-line answers', () => {
-    const text = '1. Explain gravity\nAnswer: Gravity is a force.\nIt pulls objects together.';
-    const result = parseQuestionsAndAnswers(text);
-    expect(result.answers[0]).toContain('Gravity is a force.');
-    expect(result.answers[0]).toContain('It pulls objects together.');
+  // --- Format 5: Plain numbered (no answers) ---
+  describe('Format: plain numbered list', () => {
+    it('parses plain numbered list', () => {
+      const text = '1. First question\n2. Second question\n3. Third question';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['First question', 'Second question', 'Third question']);
+      expect(result.answers).toEqual(['', '', '']);
+    });
+  });
+
+  // --- Robustness ---
+  describe('Robustness', () => {
+    it('handles mixed \\r\\n and \\n line endings', () => {
+      const text = '1. Q one\r\nAnswer: A one\n\n2. Q two\r\nAnswer: A two';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toHaveLength(2);
+      expect(result.answers).toEqual(['A one', 'A two']);
+    });
+
+    it('strips leading/trailing whitespace from questions and answers', () => {
+      const text = '1.   Padded question  \nAnswer:   Padded answer  ';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions[0]).toBe('Padded question');
+      expect(result.answers[0]).toBe('Padded answer');
+    });
+
+    it('handles a single question with no number', () => {
+      const text = 'What is the meaning of life?';
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toEqual(['What is the meaning of life?']);
+      expect(result.answers).toEqual(['']);
+    });
+
+    it('handles real-world messy paste (user scenario)', () => {
+      const text = `1. What is the SI unit of electric current?
+Answer: Ampere
+
+2. What fundamental force is responsible for holding atomic nuclei together?
+Answer: Strong nuclear force
+
+3. In thermodynamics, what is the name of the quantity that measures disorder?
+Answer: Entropy`;
+      const result = parseQuestionsAndAnswers(text);
+      expect(result.questions).toHaveLength(3);
+      expect(result.questions[0]).toBe('What is the SI unit of electric current?');
+      expect(result.questions[2]).toBe('In thermodynamics, what is the name of the quantity that measures disorder?');
+      expect(result.answers[0]).toBe('Ampere');
+      expect(result.answers[1]).toBe('Strong nuclear force');
+      expect(result.answers[2]).toBe('Entropy');
+    });
   });
 });
 

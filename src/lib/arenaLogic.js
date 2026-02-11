@@ -26,34 +26,182 @@ export const ARENA_SYSTEM_PROMPT_TEMPLATES = [
 
 /**
  * Parse "Questions & answers" text into { questions, answers }.
- * Blocks are split by lines starting with a number (1. or 2) etc.).
- * Within a block, an optional "Answer:" line starts the answer; rest is question.
- * If no Answer: is given for a question, answers[i] is '' (judge uses web or own knowledge).
+ * Auto-detects format:
+ *   1. JSON array of objects with question/q and answer/a keys
+ *   2. Separate blocks: "Questions:" header then "Answers:" / "Answer Key:" header
+ *   3. Q:/A: or Question:/Answer: labeled pairs
+ *   4. Numbered interleaved: "1. Question\nAnswer: answer\n\n2. ..."
+ *   5. Plain numbered list (no answers)
+ *   6. Single un-numbered question as fallback
+ *
+ * Handles \r\n, multiple blank lines, trailing whitespace, and mixed formats robustly.
  * @param {string} text
  * @returns {{ questions: string[], answers: string[] }}
  */
 export function parseQuestionsAndAnswers(text) {
   if (!text || typeof text !== 'string') return { questions: [], answers: [] };
-  const blocks = text.split(/\n\s*(?=\d+[.)]\s*)/).filter((b) => b.trim().length > 0);
+  // Normalize line endings to \n and trim
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  if (!normalized) return { questions: [], answers: [] };
+
+  // --- Format 1: JSON ---
+  if (/^\s*\[/.test(normalized)) {
+    try {
+      const arr = JSON.parse(normalized);
+      if (Array.isArray(arr) && arr.length > 0) {
+        const result = tryParseJSON(arr);
+        if (result) return result;
+      }
+    } catch (_) { /* not valid JSON, fall through */ }
+  }
+
+  // --- Format 2: Separate blocks (Questions: ... Answers: ...) ---
+  const separateResult = tryParseSeparateBlocks(normalized);
+  if (separateResult) return separateResult;
+
+  // --- Format 3: Numbered interleaved (with optional Answer: per block) ---
+  // Check numbered BEFORE Q/A labeled because "Question:" prefix + "Answer:" can
+  // look like Q/A labeled, but numbered format takes priority when numbers are present.
+  const numberedResult = tryParseNumbered(normalized);
+  if (numberedResult) return numberedResult;
+
+  // --- Format 4: Q:/A: or Question:/Answer: labeled ---
+  const qaResult = tryParseQALabeled(normalized);
+  if (qaResult) return qaResult;
+
+  // --- Fallback: treat entire text as a single question ---
+  const trimmed = normalized.trim();
+  if (trimmed) return { questions: [trimmed], answers: [''] };
+  return { questions: [], answers: [] };
+}
+
+/** Try to parse JSON array of Q&A objects. */
+function tryParseJSON(arr) {
+  const questions = [];
+  const answers = [];
+  for (const item of arr) {
+    if (!item || typeof item !== 'object') continue;
+    const q = (item.question ?? item.q ?? item.Q ?? item.Question ?? '').toString().trim();
+    const a = (item.answer ?? item.a ?? item.A ?? item.Answer ?? '').toString().trim();
+    if (q) {
+      questions.push(q);
+      answers.push(a);
+    }
+  }
+  return questions.length > 0 ? { questions, answers } : null;
+}
+
+/**
+ * Try to parse separate "Questions:" and "Answers:" blocks.
+ * Detects headers like "Questions:", "Answers:" (PLURAL), "Answer Key:" (two words).
+ * Does NOT match singular "Answer:" which is interleaved format.
+ */
+function tryParseSeparateBlocks(text) {
+  // Only match plural "Answers:" or "Answer Key:" — NOT singular "Answer:" (that's interleaved)
+  const answerHeaderRe = /^(?:answers|answer\s+key)\s*:/im;
+  const answerHeaderMatch = text.match(answerHeaderRe);
+  if (!answerHeaderMatch) return null;
+
+  const headerIndex = text.indexOf(answerHeaderMatch[0]);
+  let questionSection = text.slice(0, headerIndex).trim();
+  const answerSection = text.slice(headerIndex + answerHeaderMatch[0].length).trim();
+
+  // Strip "Questions:" header from the question section if present
+  questionSection = questionSection.replace(/^(?:questions?)\s*:\s*/i, '').trim();
+
+  const questions = extractNumberedItems(questionSection);
+  const answersRaw = extractNumberedItems(answerSection);
+  if (questions.length === 0) return null;
+
+  // Pad answers to match questions length
+  const answers = questions.map((_, i) => (answersRaw[i] ?? '').trim());
+  return { questions, answers };
+}
+
+/**
+ * Try to parse Q:/A: or Question:/Answer: labeled format.
+ * Each Q starts a new question; A (if present) provides the answer.
+ */
+function tryParseQALabeled(text) {
+  // Check if the text has Q: or Question: patterns
+  const lines = text.split('\n');
+  const qPattern = /^\s*(?:Q|Question)\s*:\s*(.*)/i;
+  const aPattern = /^\s*(?:A|Answer)\s*:\s*(.*)/i;
+
+  // Need at least 2 Q: lines to confirm this format (or 1 Q: + 1 A:)
+  let qCount = 0;
+  let aCount = 0;
+  for (const line of lines) {
+    if (qPattern.test(line)) qCount++;
+    if (aPattern.test(line)) aCount++;
+  }
+  if (qCount < 1 || (qCount < 2 && aCount < 1)) return null;
+
+  const questions = [];
+  const answers = [];
+  let currentQ = null;
+  let currentA = null;
+
+  function flush() {
+    if (currentQ !== null) {
+      questions.push(currentQ.trim());
+      answers.push((currentA ?? '').trim());
+    }
+    currentQ = null;
+    currentA = null;
+  }
+
+  for (const line of lines) {
+    const qMatch = line.match(qPattern);
+    const aMatch = line.match(aPattern);
+    if (qMatch) {
+      flush();
+      currentQ = qMatch[1].trim();
+    } else if (aMatch && currentQ !== null) {
+      currentA = aMatch[1].trim();
+    } else if (currentA !== null) {
+      // Continuation of multi-line answer
+      currentA += '\n' + line;
+    } else if (currentQ !== null && !aMatch) {
+      // Continuation of multi-line question (before any A:)
+      currentQ += '\n' + line;
+    }
+  }
+  flush();
+
+  return questions.length > 0 ? { questions, answers } : null;
+}
+
+/**
+ * Try to parse numbered format: "1. Question\nAnswer: answer\n\n2. ..."
+ * Handles 1. or 1) numbering, optional Answer: lines, multiple blank lines.
+ */
+function tryParseNumbered(text) {
+  // Split into blocks at lines starting with a number prefix
+  const blocks = text.split(/\n\s*(?=\d+[.)]\s+)/).filter((b) => b.trim().length > 0);
+  if (blocks.length === 0) return null;
+
+  // Check that at least the first block starts with a number
+  if (!/^\s*\d+[.)]\s+/.test(blocks[0])) return null;
+
   const questions = [];
   const answers = [];
   for (const block of blocks) {
-    const lines = block.split(/\n/);
-    const first = lines[0] || '';
-    const numberStripped = first.replace(/^\s*\d+[.)]\s*/, '').trim();
+    const lines = block.split('\n');
+    const first = (lines[0] || '').replace(/^\s*\d+[.)]\s+/, '').trim();
     let questionLines = [];
     let answerLines = [];
-    let foundAnswer = false;
+    let inAnswer = false;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      if (/^\s*Answer:\s*/i.test(line)) {
-        foundAnswer = true;
-        answerLines.push(line.replace(/^\s*Answer:\s*/i, '').trim());
-        for (let j = i + 1; j < lines.length; j++) answerLines.push(lines[j]);
-        break;
+      if (/^\s*Answer\s*:\s*/i.test(line)) {
+        inAnswer = true;
+        answerLines.push(line.replace(/^\s*Answer\s*:\s*/i, '').trim());
+      } else if (inAnswer) {
+        answerLines.push(line);
+      } else {
+        questionLines.push(i === 0 ? first : line);
       }
-      if (i === 0) questionLines.push(numberStripped);
-      else questionLines.push(line);
     }
     const q = questionLines.join('\n').trim();
     const a = answerLines.join('\n').trim();
@@ -62,7 +210,23 @@ export function parseQuestionsAndAnswers(text) {
       answers.push(a);
     }
   }
-  return { questions, answers };
+  return questions.length > 0 ? { questions, answers } : null;
+}
+
+/**
+ * Extract numbered items from a section of text.
+ * Handles "1. item", "1) item", or plain lines.
+ */
+function extractNumberedItems(text) {
+  if (!text || !text.trim()) return [];
+  const lines = text.split('\n').filter((l) => l.trim().length > 0);
+  // Check if lines are numbered
+  const numberedLines = lines.filter((l) => /^\s*\d+[.)]\s+/.test(l));
+  if (numberedLines.length > 0) {
+    return numberedLines.map((l) => l.replace(/^\s*\d+[.)]\s+/, '').trim());
+  }
+  // Fallback: each non-empty line is an item
+  return lines.map((l) => l.trim());
 }
 
 /**
