@@ -9,7 +9,6 @@ export const UI_THEME_OPTIONS = [
   { value: 'newsprint', label: 'Newsprint (Editorial)' },
   { value: 'dailyedition', label: 'Daily Edition (Front Page)' },
   { value: 'neural', label: 'Neural Network Blue' },
-  { value: 'quantum', label: 'Quantum Purple' },
   { value: 'arctic', label: 'Arctic Command' },
   { value: 'neon', label: 'Neon Daylight' },
   { value: 'mint', label: 'Mint Laboratory' },
@@ -29,5 +28,4 @@ export const UI_THEME_OPTIONS = [
   { value: 'magmaflow', label: 'Magma Flow' },
   { value: 'chromeglass', label: 'Chrome & Glass' },
   { value: 'toxicwaste', label: 'Toxic Waste' },
-  { value: 'oceandeep', label: 'Ocean Deep' },
 ];

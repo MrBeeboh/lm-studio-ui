@@ -408,6 +408,43 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
 [data-ui-theme="dailyedition"] .send-button:hover:not(:disabled):not([style*="background: var(--ui-accent-hot)"]) {
   background: #a67c1a !important;
 }
+/* Daily Edition: bold newspaper headline for chat greeting */
+[data-ui-theme="dailyedition"] .ui-greeting-title {
+  font-family: 'Anton', 'Georgia', serif;
+  font-size: clamp(2.5rem, 7vw, 4.5rem);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+  text-transform: uppercase;
+  color: var(--ui-text-primary);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Splash: decorative divider between suggestion buttons and chat input (thin lines + centered icon) */
+.ui-splash-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.ui-splash-divider-line {
+  flex: 1;
+  height: 0;
+  border-bottom: 1px solid var(--ui-border);
+  opacity: 0.7;
+}
+.ui-splash-divider-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ui-accent);
+  opacity: 0.9;
+  user-select: none;
+  flex-shrink: 0;
+}
 
 /* Neural Network Blue */
 [data-ui-theme="neural"] {
@@ -432,31 +469,6 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   background: linear-gradient(135deg, #0b0c10 0%, #1f2833 50%, #0b0c10 100%);
   background-size: 200% 200%;
   animation: ui-gradient-shift 18s ease infinite;
-}
-
-/* Option 3: Quantum Purple */
-[data-ui-theme="quantum"] {
-  --ui-bg-main: #0d0221;
-  --ui-bg-sidebar: #16001e;
-  --ui-accent: #7209b7;
-  --ui-accent-hot: #f72585;
-  --ui-text-primary: #f0f0f0;
-  --ui-text-secondary: #b8b8d1;
-  --ui-border: #2d1b4e;
-  --ui-sidebar-active: #0d0221;
-  --ui-sidebar-hover: #2d1b4e;
-  --ui-input-bg: #16001e;
-  --ui-input-border: #2d1b4e;
-  --ui-glow: rgba(114, 9, 183, 0.35);
-  --atom-accent: #f72585;
-  --atom-accent-light: #4361ee;
-  --atom-teal: #4361ee;
-  --atom-amber: #7209b7;
-}
-[data-ui-theme="quantum"] body {
-  background: linear-gradient(135deg, #0d0221 0%, #16001e 100%);
-  background-size: 200% 200%;
-  animation: ui-gradient-shift 15s ease infinite;
 }
 
 /* ========== Light themes ========== */
@@ -919,32 +931,6 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
 }
 [data-ui-theme="toxicwaste"] .ui-btn-accent {
   animation: theme-heartbeat 2.2s ease-in-out infinite;
-}
-
-/* Option 20: Ocean Deep (Blue/Teal Underwater) – dynamic: depth gradient */
-[data-ui-theme="oceandeep"] {
-  --ui-bg-main: #001529;
-  --ui-bg-sidebar: #002140;
-  --ui-accent: #1890ff;
-  --ui-accent-hot: #13c2c2;
-  --ui-accent-cool: #52c41a;
-  --ui-text-primary: #e6f7ff;
-  --ui-text-secondary: #91d5ff;
-  --ui-border: #003a70;
-  --ui-sidebar-active: #003050;
-  --ui-sidebar-hover: #003a70;
-  --ui-input-bg: #002140;
-  --ui-input-border: #003a70;
-  --ui-glow: rgba(24, 144, 255, 0.35);
-  --atom-accent: #1890ff;
-  --atom-accent-light: #13c2c2;
-  --atom-teal: #13c2c2;
-  --atom-amber: #52c41a;
-}
-[data-ui-theme="oceandeep"] body {
-  background: linear-gradient(180deg, #001529 0%, #002140 50%, #001529 100%);
-  background-size: 100% 200%;
-  animation: ui-gradient-shift 22s ease infinite;
 }
 
 /* ATOM — Clinical, high-contrast dark (Unified Multimedia Gatekeeper default) */

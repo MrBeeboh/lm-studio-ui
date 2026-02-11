@@ -127,7 +127,8 @@
       style="background-color: var(--ui-input-bg); color: var(--ui-text-primary); border-color: var(--ui-border);"
       onclick={toggle}
       onkeydown={(e) => e.key === 'Escape' && (open = false)}
-      aria-label="Select model">
+      aria-label="Select model"
+      title={$selectedModelId || 'Select model'}>
       {#if $selectedModelId}
         {@const selIcon = getModelIcon($selectedModelId, $modelIconOverrides)}
         <img src={selIcon} alt="" class="w-4 h-4 shrink-0 rounded object-contain" />

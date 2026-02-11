@@ -369,7 +369,6 @@
     display: flex;
     gap: 12px;
     padding: 16px;
-    border-top: 1px solid var(--ui-border, #e5e7eb);
   }
 
   textarea {

@@ -17,7 +17,6 @@
     newsprint:        { bg: '#f4f1ea', accent: '#8b2500', text: '#1c1917' },
     dailyedition:     { bg: '#f2efe6', accent: '#8b6914', text: '#1a1a1a' },
     neural:           { bg: '#0b0c10', accent: '#66fcf1', text: '#c5c6c7' },
-    quantum:          { bg: '#0d0221', accent: '#f72585', text: '#f0f0f0' },
     arctic:           { bg: '#f8fafc', accent: '#f97316', text: '#0f172a' },
     neon:             { bg: '#ffffff', accent: '#eab308', text: '#171717' },
     mint:             { bg: '#f0fdf4', accent: '#10b981', text: '#064e3b' },
@@ -37,7 +36,6 @@
     magmaflow:        { bg: '#1a0a00', accent: '#ff4500', text: '#fff5ee' },
     chromeglass:      { bg: '#f8f9fa', accent: '#0066cc', text: '#212529' },
     toxicwaste:       { bg: '#000000', accent: '#ffff00', text: '#ffff00' },
-    oceandeep:        { bg: '#001529', accent: '#1890ff', text: '#e6f7ff' },
   };
 </script>
 

@@ -1,6 +1,7 @@
 <script>
   import { get } from 'svelte/store';
-  import { chatError, dashboardModelA, dashboardModelB, dashboardModelC, dashboardModelD, isStreaming, settings, liveTokens, pushTokSample, liveTokPerSec, arenaPanelCount, arenaSlotAIsJudge, arenaSlotOverrides, setArenaSlotOverride, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress } from '$lib/stores.js';
+  import { onMount } from 'svelte';
+  import { chatError, dashboardModelA, dashboardModelB, dashboardModelC, dashboardModelD, isStreaming, settings, liveTokens, pushTokSample, liveTokPerSec, arenaPanelCount, arenaSlotAIsJudge, arenaSlotOverrides, setArenaSlotOverride, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress, layout } from '$lib/stores.js';
   import { playClick, playComplete } from '$lib/audio.js';
   import { streamChatCompletion } from '$lib/api.js';
   import { searchDuckDuckGo, formatSearchResultForChat } from '$lib/duckduckgo.js';
@@ -23,6 +24,8 @@
   );
   /** Optional feedback/correction sent to the judge (e.g. correct NFPA 72 definition). */
   let judgeFeedback = $state('');
+  /** Collapsed by default so the feedback block doesn't dominate the UI. */
+  let judgeFeedbackOpen = $state(false);
   let runId = 0;
   let lastSampleAt = 0;
   let lastSampleTokens = 0;
@@ -30,6 +33,20 @@
   let optionsOpenSlot = $state(null);
 
   const aborters = { A: null, B: null, C: null, D: null };
+
+  onMount(() => {
+    function onKeydown(e) {
+      if (get(layout) !== 'arena') return;
+      if (!e.altKey || e.ctrlKey || e.metaKey) return;
+      const n = e.key === '1' ? 1 : e.key === '2' ? 2 : e.key === '3' ? 3 : e.key === '4' ? 4 : null;
+      if (n != null) {
+        e.preventDefault();
+        arenaPanelCount.set(n);
+      }
+    }
+    document.addEventListener('keydown', onKeydown);
+    return () => document.removeEventListener('keydown', onKeydown);
+  });
 
   /** Helper for per-slot override inputs so we get correct event target type. */
   function slotOverrideInput(slot, key) {
@@ -509,7 +526,7 @@
     class="flex-1 min-h-0 grid gap-2 p-2 atom-layout-transition relative {isMobile ? 'overflow-y-auto' : 'grid-rows-[minmax(0,1fr)]'}"
     style="grid-template-columns: {responsiveGridCols};">
     {#if $arenaPanelCount >= 1}
-    <div class="flex flex-col min-h-0 h-full overflow-hidden rounded-xl atom-panel-wrap" style="background-color: var(--ui-bg-main);" in:fly={{ x: 200, duration: 800, easing: quintOut }}>
+    <div class="flex flex-col min-h-0 h-full overflow-hidden rounded-xl atom-panel-wrap" style="background-color: var(--ui-bg-main);" role="region" aria-label="Model A panel" in:fly={{ x: 200, duration: 800, easing: quintOut }}>
       <div class="shrink-0 px-3 py-2">
         <div class="flex items-center justify-between gap-2">
           <span class="text-xs font-medium" style="color: var(--ui-text-secondary);">Model A{$arenaSlotAIsJudge ? ' (Judge)' : ''}</span>
@@ -521,7 +538,7 @@
             {/if}
           </div>
         </div>
-        <div class="text-xs truncate" style="color: var(--ui-text-secondary);">{$dashboardModelA || 'Select a model'}</div>
+        <div class="text-xs truncate" style="color: var(--ui-text-secondary);" title={$dashboardModelA || 'Select a model'}>{$dashboardModelA || 'Select a model'}</div>
         {#if slotErrors.A}<div class="text-xs mt-1" style="color: var(--ui-accent-hot);">{slotErrors.A}</div>{/if}
         {#if optionsOpenSlot === 'A'}
           <div class="mt-2 p-2 rounded-lg border text-xs" style="border-color: var(--ui-border); background-color: var(--ui-input-bg);">
@@ -567,7 +584,7 @@
     {/if}
 
     {#if $arenaPanelCount >= 2}
-    <div class="flex flex-col min-h-0 h-full overflow-hidden rounded-xl atom-panel-wrap" style="background-color: var(--ui-bg-main);" in:fly={{ x: 200, duration: 800, easing: quintOut }}>
+    <div class="flex flex-col min-h-0 h-full overflow-hidden rounded-xl atom-panel-wrap" style="background-color: var(--ui-bg-main);" role="region" aria-label="Model B panel" in:fly={{ x: 200, duration: 800, easing: quintOut }}>
       <div class="shrink-0 px-3 py-2">
         <div class="flex items-center justify-between gap-2">
           <span class="text-xs font-medium" style="color: var(--ui-text-secondary);">Model B</span>
@@ -579,7 +596,7 @@
             {/if}
           </div>
         </div>
-        <div class="text-xs truncate" style="color: var(--ui-text-secondary);">{$dashboardModelB || 'Select a model'}</div>
+        <div class="text-xs truncate" style="color: var(--ui-text-secondary);" title={$dashboardModelB || 'Select a model'}>{$dashboardModelB || 'Select a model'}</div>
         {#if slotErrors.B}<div class="text-xs mt-1" style="color: var(--ui-accent-hot);">{slotErrors.B}</div>{/if}
         {#if optionsOpenSlot === 'B'}
           <div class="mt-2 p-2 rounded-lg border text-xs" style="border-color: var(--ui-border); background-color: var(--ui-input-bg);">
@@ -623,7 +640,7 @@
     {/if}
 
     {#if $arenaPanelCount >= 3}
-    <div class="flex flex-col min-h-0 h-full overflow-hidden rounded-xl atom-panel-wrap" style="background-color: var(--ui-bg-main);" in:fly={{ x: 200, duration: 800, easing: quintOut }}>
+    <div class="flex flex-col min-h-0 h-full overflow-hidden rounded-xl atom-panel-wrap" style="background-color: var(--ui-bg-main);" role="region" aria-label="Model C panel" in:fly={{ x: 200, duration: 800, easing: quintOut }}>
       <div class="shrink-0 px-3 py-2">
         <div class="flex items-center justify-between gap-2">
           <span class="text-xs font-medium" style="color: var(--ui-text-secondary);">Model C</span>
@@ -635,7 +652,7 @@
             {/if}
           </div>
         </div>
-        <div class="text-xs truncate" style="color: var(--ui-text-secondary);">{$dashboardModelC || 'Select a model'}</div>
+        <div class="text-xs truncate" style="color: var(--ui-text-secondary);" title={$dashboardModelC || 'Select a model'}>{$dashboardModelC || 'Select a model'}</div>
         {#if slotErrors.C}<div class="text-xs mt-1" style="color: var(--ui-accent-hot);">{slotErrors.C}</div>{/if}
         {#if optionsOpenSlot === 'C'}
           <div class="mt-2 p-2 rounded-lg border text-xs" style="border-color: var(--ui-border); background-color: var(--ui-input-bg);">
@@ -679,7 +696,7 @@
     {/if}
 
     {#if $arenaPanelCount >= 4}
-    <div class="flex flex-col min-h-0 h-full overflow-hidden rounded-xl atom-panel-wrap" style="background-color: var(--ui-bg-main);" in:fly={{ x: 200, duration: 800, easing: quintOut }}>
+    <div class="flex flex-col min-h-0 h-full overflow-hidden rounded-xl atom-panel-wrap" style="background-color: var(--ui-bg-main);" role="region" aria-label="Model D panel" in:fly={{ x: 200, duration: 800, easing: quintOut }}>
       <div class="shrink-0 px-3 py-2">
         <div class="flex items-center justify-between gap-2">
           <span class="text-xs font-medium" style="color: var(--ui-text-secondary);">Model D</span>
@@ -691,7 +708,7 @@
             {/if}
           </div>
         </div>
-        <div class="text-xs truncate" style="color: var(--ui-text-secondary);">{$dashboardModelD || 'Select a model'}</div>
+        <div class="text-xs truncate" style="color: var(--ui-text-secondary);" title={$dashboardModelD || 'Select a model'}>{$dashboardModelD || 'Select a model'}</div>
         {#if slotErrors.D}<div class="text-xs mt-1" style="color: var(--ui-accent-hot);">{slotErrors.D}</div>{/if}
         {#if optionsOpenSlot === 'D'}
           <div class="mt-2 p-2 rounded-lg border text-xs" style="border-color: var(--ui-border); background-color: var(--ui-input-bg);">
@@ -745,25 +762,49 @@
         <span class="text-xs">Parallel runs all models at once and uses more resources.</span>
         {#if $arenaSlotAIsJudge}
           <div class="flex flex-wrap items-center gap-2">
-            <label class="flex flex-col gap-1 text-xs" style="color: var(--ui-text-secondary);">
-              Feedback to judge (optional):
-              <textarea
-                class="px-2 py-1 rounded border text-xs min-w-[16rem] max-w-md resize-y"
-                style="border-color: var(--ui-border); background-color: var(--ui-input-bg); color: var(--ui-text-primary);"
-                placeholder="Paste correction (e.g. correct NFPA 72 definition). Judge will use this to re-evaluate."
-                rows="2"
-                bind:value={judgeFeedback}
-             ></textarea>
-            </label>
             <button
               type="button"
-              class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-              style="background-color: var(--ui-accent); color: var(--ui-bg-main);"
-              disabled={!canRunJudgment}
-              onclick={() => { if (canRunJudgment) runJudgment(); }}
-            >
-              Judgment time
+              class="flex items-center gap-1.5 text-xs font-medium rounded px-2 py-1 transition-colors"
+              style="color: var(--ui-text-secondary);"
+              onclick={() => judgeFeedbackOpen = !judgeFeedbackOpen}
+              aria-expanded={judgeFeedbackOpen}
+              aria-controls="arena-judge-feedback-block">
+              <span aria-hidden="true">{judgeFeedbackOpen ? '▼' : '▶'}</span>
+              Feedback to judge (optional)
             </button>
+            {#if judgeFeedbackOpen}
+              <div id="arena-judge-feedback-block" class="flex flex-wrap items-center gap-2 w-full" role="region" aria-label="Judge feedback and run judgment">
+                <label class="flex flex-col gap-1 text-xs min-w-[16rem]" style="color: var(--ui-text-secondary);">
+                  <span class="sr-only">Paste correction for the judge</span>
+                  <textarea
+                    class="px-2 py-1 rounded border text-xs max-w-md resize-y"
+                    style="border-color: var(--ui-border); background-color: var(--ui-input-bg); color: var(--ui-text-primary);"
+                    placeholder="Paste correction (e.g. correct NFPA 72 definition). Judge will use this to re-evaluate."
+                    rows="2"
+                    bind:value={judgeFeedback}
+                  ></textarea>
+                </label>
+                <button
+                  type="button"
+                  class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                  style="background-color: var(--ui-accent); color: var(--ui-bg-main);"
+                  disabled={!canRunJudgment}
+                  onclick={() => { if (canRunJudgment) runJudgment(); }}
+                  aria-label="Run judgment with optional feedback">
+                  Judgment time
+                </button>
+              </div>
+            {:else}
+              <button
+                type="button"
+                class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                style="background-color: var(--ui-accent); color: var(--ui-bg-main);"
+                disabled={!canRunJudgment}
+                onclick={() => { if (canRunJudgment) runJudgment(); }}
+                aria-label="Run judgment">
+                Judgment time
+              </button>
+            {/if}
           </div>
         {/if}
       </div>

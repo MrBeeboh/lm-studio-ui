@@ -156,7 +156,7 @@
       <!-- Perplexity-style: centered start-chat with input in the middle, generous width so placeholder fits -->
       <div class="flex-1 flex flex-col items-center justify-center px-4 py-8 min-h-0">
         <div class="w-full max-w-[min(700px,92%)] mx-auto flex flex-col items-center">
-          <h1 class="text-2xl md:text-3xl font-semibold mb-6 text-center" style="color: var(--ui-text-primary);">What can I help with?</h1>
+          <h1 class="ui-greeting-title text-2xl md:text-3xl font-semibold mb-6 text-center" style="color: var(--ui-text-primary);">What can I help with?</h1>
           <div class="flex flex-wrap justify-center gap-2 mb-6">
             {#each ['Explain this concept simply', 'Write a short story', 'Help me debug code', 'Summarize in 3 bullet points'] as suggestion}
               <button
@@ -173,6 +173,11 @@
               <button type="button" class="shrink-0 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30" onclick={() => chatError.set(null)} aria-label="Dismiss">×</button>
             </div>
           {/if}
+          <div class="ui-splash-divider my-6 w-full max-w-[min(700px,92%)]" aria-hidden="true">
+            <span class="ui-splash-divider-line"></span>
+            <span class="ui-splash-divider-icon" aria-hidden="true">✦</span>
+            <span class="ui-splash-divider-line"></span>
+          </div>
           <div class="w-full min-w-0">
             <ChatInput
               onSend={sendUserMessage}

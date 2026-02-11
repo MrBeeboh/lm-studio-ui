@@ -190,10 +190,10 @@
           {/each}
         </nav>
         <div class="flex items-center gap-2 shrink-0">
-          <span class="text-xs" style="color: var(--ui-text-secondary);">Panels</span>
-          <div class="flex rounded-lg border overflow-hidden" style="border-color: var(--ui-border);">
+          <span class="text-xs" style="color: var(--ui-text-secondary);" title="Alt+1 through Alt+4 to switch">Panels</span>
+          <div class="flex rounded-lg border overflow-hidden" style="border-color: var(--ui-border);" role="group" aria-label="Arena panel count">
             {#each [1, 2, 3, 4] as n}
-              <button type="button" class="w-8 h-7 text-xs font-medium transition-colors {$arenaPanelCount === n ? '' : 'opacity-70'}" style="{$arenaPanelCount === n ? 'background-color: var(--ui-sidebar-active); color: var(--ui-text-primary);' : 'background-color: var(--ui-bg-main); color: var(--ui-text-secondary);'}" onclick={() => arenaPanelCount.set(n)} aria-label="{n} panel{n === 1 ? '' : 's'}" aria-pressed={$arenaPanelCount === n}>{n}</button>
+              <button type="button" class="w-8 h-7 text-xs font-medium transition-colors {$arenaPanelCount === n ? '' : 'opacity-70'}" style="{$arenaPanelCount === n ? 'background-color: var(--ui-sidebar-active); color: var(--ui-text-primary);' : 'background-color: var(--ui-bg-main); color: var(--ui-text-secondary);'}" onclick={() => arenaPanelCount.set(n)} aria-label="{n} panel{n === 1 ? '' : 's'} (Alt+{n})" aria-pressed={$arenaPanelCount === n} title="{n} panel{n === 1 ? '' : 's'} — Alt+{n}">{n}</button>
             {/each}
           </div>
           <span class="text-xs" style="color: var(--ui-text-secondary);">Chat uses Model A</span>
