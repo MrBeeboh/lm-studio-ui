@@ -118,11 +118,14 @@
   /** Unified 0–100% series: each point { tok, vram, gpu, ram, cpu }. Kept to 2× window so we have scroll headroom. */
   let unifiedSeries = $state([]);
 
+  const METRICS_INTERVAL_MS = 5000; // 5s when visible – was 1s; reduces load and keeps UI responsive
   $effect(() => {
     let cancelled = false;
+    let id;
     function tick() {
       if (cancelled) return;
       if (!get(floatingMetricsOpen) || get(floatingMetricsMinimized)) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return; // pause when tab in background
       const tok = get(liveTokPerSec) ?? get(lastResponseTokPerSec) ?? 0;
       fetchHardwareMetrics().then((m) => {
         if (cancelled) return;
@@ -142,7 +145,7 @@
       });
     }
     tick();
-    const id = setInterval(tick, 1000);
+    id = setInterval(tick, METRICS_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(id);

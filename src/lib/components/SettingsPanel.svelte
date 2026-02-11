@@ -18,7 +18,6 @@
     model_ttl_seconds: 0,
     audio_enabled: true,
     audio_clicks: true,
-    audio_typing: false,
     audio_volume: 0.25,
     context_length: 4096,
     eval_batch_size: 512,
@@ -47,7 +46,6 @@
   let modelTtlSeconds = $state(DEFAULTS.model_ttl_seconds);
   let audioEnabled = $state(DEFAULTS.audio_enabled);
   let audioClicks = $state(DEFAULTS.audio_clicks);
-  let audioTyping = $state(DEFAULTS.audio_typing);
   let audioVolume = $state(DEFAULTS.audio_volume);
   let contextLength = $state(DEFAULTS.context_length);
   let evalBatchSize = $state(DEFAULTS.eval_batch_size);
@@ -69,7 +67,6 @@
     modelTtlSeconds = s.model_ttl_seconds ?? DEFAULTS.model_ttl_seconds;
     audioEnabled = s.audio_enabled ?? DEFAULTS.audio_enabled;
     audioClicks = s.audio_clicks ?? DEFAULTS.audio_clicks;
-    audioTyping = s.audio_typing ?? DEFAULTS.audio_typing;
     audioVolume = s.audio_volume ?? DEFAULTS.audio_volume;
     contextLength = s.context_length ?? DEFAULTS.context_length;
     evalBatchSize = s.eval_batch_size ?? DEFAULTS.eval_batch_size;
@@ -198,7 +195,6 @@
       model_ttl_seconds: Math.max(0, Number(modelTtlSeconds) || 0),
       audio_enabled: !!audioEnabled,
       audio_clicks: !!audioClicks,
-      audio_typing: !!audioTyping,
       audio_volume: Math.max(0, Math.min(1, Number(audioVolume) || 0)),
       context_length: contextLength,
       eval_batch_size: evalBatchSize,
@@ -224,7 +220,6 @@
     modelTtlSeconds = d.model_ttl_seconds ?? DEFAULTS.model_ttl_seconds;
     audioEnabled = d.audio_enabled ?? DEFAULTS.audio_enabled;
     audioClicks = d.audio_clicks ?? DEFAULTS.audio_clicks;
-    audioTyping = d.audio_typing ?? DEFAULTS.audio_typing;
     audioVolume = d.audio_volume ?? DEFAULTS.audio_volume;
     contextLength = d.context_length ?? DEFAULTS.context_length;
     evalBatchSize = d.eval_batch_size ?? DEFAULTS.eval_batch_size;
@@ -400,10 +395,6 @@
           <label class="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" bind:checked={audioClicks} disabled={!audioEnabled} class="rounded border-zinc-300 dark:border-zinc-600 accent-themed" />
             <span class="text-sm text-zinc-700 dark:text-zinc-300">Click sounds for actions</span>
-          </label>
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" bind:checked={audioTyping} disabled={!audioEnabled} class="rounded border-zinc-300 dark:border-zinc-600 accent-themed" />
-            <span class="text-sm text-zinc-700 dark:text-zinc-300">Typing sound during generation</span>
           </label>
           <div>
             <label for="settings-audio-volume" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-1">Volume</label>

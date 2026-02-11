@@ -6,7 +6,11 @@ function getBaseUrl() {
   return url || 'http://localhost:1234';
 }
 
+/**
+ * @returns {Promise<{ usage?: { completion_tokens?: number, prompt_tokens?: number }, elapsedMs: number }>}
+ */
 export async function sendMessage(model, messages, onChunk) {
+  const startTime = Date.now();
   const baseUrl = getBaseUrl();
   const response = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: 'POST',
@@ -30,6 +34,8 @@ export async function sendMessage(model, messages, onChunk) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  /** @type {{ completion_tokens?: number, prompt_tokens?: number } | undefined} */
+  let usage;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -41,7 +47,7 @@ export async function sendMessage(model, messages, onChunk) {
 
     for (const line of lines) {
       if (line.startsWith('data: ')) {
-        const data = line.slice(6);
+        const data = line.slice(6).trim();
         if (data === '[DONE]') continue;
 
         try {
@@ -50,10 +56,15 @@ export async function sendMessage(model, messages, onChunk) {
           if (content) {
             onChunk(content);
           }
+          if (json.usage) {
+            usage = json.usage;
+          }
         } catch (_) {
           // Malformed SSE line; skip
         }
       }
     }
   }
+
+  return { usage, elapsedMs: Date.now() - startTime };
 }

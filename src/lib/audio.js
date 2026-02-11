@@ -55,7 +55,3 @@ export function playClick(vol = 0.25) {
 export function playComplete(vol = 0.25) {
   playTone({ freq: 880, duration: 0.08, type: 'triangle', volume: vol * 0.65, minInterval: 120 });
 }
-
-export function playTyping(vol = 0.25) {
-  playTone({ freq: 1600, duration: 0.02, type: 'square', volume: vol * 0.2, minInterval: 60 });
-}

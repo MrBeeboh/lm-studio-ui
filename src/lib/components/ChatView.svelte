@@ -96,8 +96,9 @@
     isStreaming.set(true);
     let fullContent = '';
 
+    let streamResult;
     try {
-      await sendMessage($effectiveModelId, apiMessages, (chunk) => {
+      streamResult = await sendMessage($effectiveModelId, apiMessages, (chunk) => {
         fullContent += chunk;
         activeMessages.update((arr) => {
           const out = [...arr];
@@ -119,7 +120,18 @@
       isStreaming.set(false);
     }
 
-    await addMessage(convId, { role: 'assistant', content: fullContent, modelId: $effectiveModelId });
+    const completionTokens = streamResult?.usage?.completion_tokens ?? Math.max(1, Math.ceil(fullContent.length / 4));
+    const elapsedMs = streamResult?.elapsedMs ?? 0;
+    const stats =
+      elapsedMs > 0
+        ? {
+            completion_tokens: completionTokens,
+            elapsed_ms: elapsedMs,
+            prompt_tokens: streamResult?.usage?.prompt_tokens ?? undefined,
+            estimated: streamResult?.usage?.completion_tokens == null,
+          }
+        : null;
+    await addMessage(convId, { role: 'assistant', content: fullContent, modelId: $effectiveModelId, stats });
     await loadMessages();
 
     const conv = $conversations.find((c) => c.id === convId);

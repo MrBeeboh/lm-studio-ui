@@ -1,5 +1,5 @@
 <script>
-  import { renderMarkdown } from '$lib/markdown.js';
+  import { renderMarkdown, splitThinkingAndAnswer } from '$lib/markdown.js';
   import { fly } from 'svelte/transition';
   import { bounceOut } from 'svelte/easing';
   import PerfStats from '$lib/components/PerfStats.svelte';
@@ -10,7 +10,9 @@
   const isAssistant = $derived(message.role === 'assistant');
   const content = $derived(typeof message.content === 'string' ? message.content : '');
   const contentArray = $derived(Array.isArray(message.content) ? message.content : []);
-  const html = $derived(isAssistant && content ? renderMarkdown(content) : '');
+  const parts = $derived(isAssistant && content ? splitThinkingAndAnswer(content) : []);
+  const hasThinkingOrAnswer = $derived(parts.length > 0);
+  const html = $derived(isAssistant && content && !hasThinkingOrAnswer ? renderMarkdown(content) : '');
 
   function copyContent() {
     const text = content || contentArray.map((p) => (p.type === 'text' ? p.text : '')).join('');
@@ -57,15 +59,25 @@
         <div class="flex items-center py-1" aria-label="Thinking">
           <svg class="thinking-atom-icon w-8 h-8" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="16" cy="16" r="3" class="thinking-atom-nucleus" />
-            <ellipse cx="16" cy="16" rx="12" ry="5" stroke-width="1.5" opacity="0.9" class="thinking-atom-orbit" />
-            <ellipse cx="16" cy="16" rx="12" ry="5" stroke-width="1.5" opacity="0.85" class="thinking-atom-orbit-2" />
-            <ellipse cx="16" cy="16" rx="12" ry="5" stroke-width="1.5" opacity="0.85" class="thinking-atom-orbit-3" />
+            <ellipse cx="16" cy="16" rx="10" ry="4" class="thinking-atom-orbit" />
+            <ellipse cx="16" cy="16" rx="12" ry="5" class="thinking-atom-orbit-2" />
+            <ellipse cx="16" cy="16" rx="11" ry="4.5" class="thinking-atom-orbit-3" />
           </svg>
         </div>
       {:else}
-        <div class="prose-chat prose dark:prose-invert max-w-none">
-          {@html html}
-        </div>
+        {#if hasThinkingOrAnswer}
+          <div class="prose-chat prose dark:prose-invert max-w-none space-y-3">
+            {#each parts as part}
+              <div class:assistant-thinking={part.type === 'thinking'} class:assistant-answer={part.type === 'answer'}>
+                {@html part.html}
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div class="prose-chat prose dark:prose-invert max-w-none">
+            {@html html}
+          </div>
+        {/if}
         <div class="flex items-center gap-1 mt-2 pt-2 border-t border-zinc-200/60 dark:border-zinc-600/60">
           <button type="button" class="text-[10px] px-2 py-1 rounded border border-zinc-200 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors" style="color: var(--ui-text-secondary);" onclick={copyContent} title="Copy">Copy</button>
           <button type="button" class="text-[10px] px-2 py-1 rounded border border-zinc-200 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors" style="color: var(--ui-text-secondary);" onclick={pinContent} title="Pin to Workbench">Pin</button>

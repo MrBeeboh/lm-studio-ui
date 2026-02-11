@@ -187,7 +187,6 @@ const DEFAULT_SETTINGS = {
   model_ttl_seconds: 0,
   audio_enabled: readBool('audio_enabled', true),
   audio_clicks: readBool('audio_clicks', true),
-  audio_typing: readBool('audio_typing', false),
   audio_volume: readNum('audio_volume', 0.25),
   context_length: 4096,
   eval_batch_size: 512,

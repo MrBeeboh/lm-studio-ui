@@ -16,6 +16,9 @@ const HF_MODEL_GUESSES = [
   { pattern: /deepseek/i, repo: () => `deepseek-ai/DeepSeek-V3` },
   { pattern: /ernie\s*[34]?\.?\s*5/i, repo: () => `baidu/ERNIE-4.5-0.3B-PT` },
   { pattern: /ernie\s*[34]?/i, repo: () => `PaddlePaddle/ernie-3.5-tiny` },
+  { pattern: /minicpm[-.]?v[-.]?4[-_]?5/i, repo: () => `openbmb/MiniCPM-V-4_5` },
+  { pattern: /minicpm[-.]?v/i, repo: () => `openbmb/MiniCPM-V-2_6` },
+  { pattern: /minicpm/i, repo: () => `openbmb/MiniCPM-V-4_5` },
 ];
 
 /**
