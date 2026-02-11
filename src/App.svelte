@@ -160,11 +160,12 @@
             </div>
           </aside>
         {:else}
-          <div class="shrink-0 w-0 overflow-visible relative min-h-0">
+          <!-- Visible strip so the open tab is never clipped (root has overflow-hidden) -->
+          <div class="intel-tab-strip shrink-0 w-7 flex items-center justify-center relative min-h-0 border-l" style="background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);">
             <button
               type="button"
               class="panel-tab {intelTabBounce ? 'panel-tab-bounce' : ''}"
-              style="--panel-tab-transform: translate(-100%, -50%); left: 0; top: 50%; border-right: none; border-radius: 6px 0 0 6px;"
+              style="--panel-tab-transform: translateY(-50%); left: 0; top: 50%; border-right: none; border-radius: 6px 0 0 6px;"
               title="Open Intel panel"
               aria-label="Open Intel panel"
               onclick={toggleIntel}

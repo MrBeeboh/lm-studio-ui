@@ -43,14 +43,18 @@
       return;
     }
 
-    // Resize/compress images for vision API (avoids HTTP 400 on large base64). Skip for Qwen-VL 4B/8B — they work with full size.
+    // Vision: skip resize for Qwen-VL 4B/8B; otherwise resize when payload > 1 MB
+    const skipResize = shouldSkipImageResizeForVision($effectiveModelId);
     const urlsForApi = hasImages
-      ? (shouldSkipImageResizeForVision($effectiveModelId) ? imageDataUrls : await resizeImageDataUrlsForVision(imageDataUrls))
+      ? (skipResize ? imageDataUrls : await resizeImageDataUrlsForVision(imageDataUrls))
       : [];
     const userContent = hasImages
       ? [
           ...(hasText ? [{ type: 'text', text: text.trim() }] : [{ type: 'text', text: ' ' }]),
-          ...urlsForApi.map((url) => ({ type: 'image_url', image_url: { url } })),
+          ...urlsForApi.map((url) => ({
+            type: 'image_url',
+            image_url: { url, ...(skipResize ? {} : { detail: 'low' }) },
+          })),
         ]
       : text.trim();
     await addMessage(convId, { role: 'user', content: userContent });
@@ -84,7 +88,12 @@
         });
       });
     } catch (err) {
-      chatError.set(err?.message || 'Failed to get response. Is your model server running and the model loaded?');
+      const raw = err?.message || '';
+      const isLoadError = raw.includes('Failed to load model') || raw.includes('Error loading model');
+      const friendly = isLoadError
+        ? 'Model failed to load in LM Studio. Load the model in LM Studio first (or check memory). If it still fails, try re-downloading the model in case the file is corrupted.'
+        : raw || 'Failed to get response. Is your model server running and the model loaded?';
+      chatError.set(friendly);
       activeMessages.update((arr) => arr.filter((m) => m.id !== assistantMsgId));
       return;
     } finally {

@@ -222,13 +222,15 @@
       return;
     }
 
-    // Resize images for vision except when all selected models are Qwen-VL 4B/8B (they work with full size).
     const needResize = imageDataUrls.length && !selected.every((s) => shouldSkipImageResizeForVision(s.modelId));
     const urlsForApi = imageDataUrls.length ? (needResize ? await resizeImageDataUrlsForVision(imageDataUrls) : imageDataUrls) : [];
     const content = urlsForApi.length
       ? [
           { type: 'text', text: text.trim() },
-          ...urlsForApi.map((url) => ({ type: 'image_url', image_url: { url } })),
+          ...urlsForApi.map((url) => ({
+            type: 'image_url',
+            image_url: { url, ...(needResize ? { detail: 'low' } : {}) },
+          })),
         ]
       : text.trim();
 
@@ -474,6 +476,8 @@
 
 <div
   class="h-full min-h-0 flex flex-col"
+  role="region"
+  aria-label="Arena drop zone"
   ondragover={(e) => { e.preventDefault(); e.stopPropagation(); }}
   ondrop={(e) => {
     e.preventDefault();

@@ -102,6 +102,7 @@ const OLD_TO_NEW_LAYOUT = {
   focus: 'cockpit',
   workbench: 'cockpit',
   dashboard: 'arena',
+  nexus: 'cockpit',
 };
 function getInitialLayout() {
   if (typeof localStorage === 'undefined') return 'cockpit';
@@ -273,6 +274,40 @@ const arenaSlotAIsJudgeStored = () => readBool('arenaSlotAIsJudge', false);
 export const arenaSlotAIsJudge = writable(arenaSlotAIsJudgeStored());
 if (typeof localStorage !== 'undefined') {
   arenaSlotAIsJudge.subscribe((v) => localStorage.setItem('arenaSlotAIsJudge', v ? '1' : '0'));
+}
+
+/** Arena: per-slot overrides for temperature, max_tokens, system_prompt. Key = 'A'|'B'|'C'|'D'. Empty = use layout default. */
+function loadArenaSlotOverrides() {
+  if (typeof localStorage === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem('arenaSlotOverrides');
+    if (!raw) return {};
+    const p = JSON.parse(raw);
+    return typeof p === 'object' && p !== null ? p : {};
+  } catch {
+    return {};
+  }
+}
+export const arenaSlotOverrides = writable(loadArenaSlotOverrides());
+if (typeof localStorage !== 'undefined') {
+  arenaSlotOverrides.subscribe((v) => localStorage.setItem('arenaSlotOverrides', JSON.stringify(v ?? {})));
+}
+/** Update overrides for one Arena slot. Pass null to clear that slot's overrides. */
+export function setArenaSlotOverride(slot, patch) {
+  arenaSlotOverrides.update((by) => {
+    const next = { ...by };
+    if (patch == null) {
+      delete next[slot];
+      return next;
+    }
+    const merged = { ...(next[slot] ?? {}), ...patch };
+    Object.keys(merged).forEach((k) => {
+      if (merged[k] === undefined || merged[k] === '') delete merged[k];
+    });
+    if (Object.keys(merged).length === 0) delete next[slot];
+    else next[slot] = merged;
+    return next;
+  });
 }
 
 /** Floating metrics dashboard: open, minimized, position { x, y }, size { width, height }. */

@@ -5,7 +5,7 @@ export function generateId() {
 
 /**
  * Resize/compress image data URLs for vision APIs (avoids LM Studio 400 on large base64).
- * Max dimension 1024px, JPEG 0.85. Returns same URL if not an image data URL.
+ * Always re-encodes to JPEG for smaller payload; max dimension 768px for non-Qwen models.
  * @param {string} dataUrl
  * @returns {Promise<string>}
  */
@@ -13,9 +13,9 @@ export function resizeImageForVision(dataUrl) {
   if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) {
     return Promise.resolve(dataUrl);
   }
-  const maxDim = 1024;
-  const jpegQuality = 0.85;
-  return new Promise((resolve, reject) => {
+  const maxDim = 768;
+  const jpegQuality = 0.8;
+  return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -51,13 +51,19 @@ export function resizeImageForVision(dataUrl) {
   });
 }
 
+/** Approximate max payload size (bytes) for images below which we skip resize. */
+const VISION_SKIP_RESIZE_BELOW_BYTES = 1 * 1024 * 1024; // 1 MB
+
 /**
  * Resize multiple image data URLs for vision API. Preserves order.
+ * Skips resize entirely if total base64 payload is already under 1 MB.
  * @param {string[]} dataUrls
  * @returns {Promise<string[]>}
  */
 export async function resizeImageDataUrlsForVision(dataUrls) {
   if (!Array.isArray(dataUrls) || dataUrls.length === 0) return dataUrls;
+  const totalBytes = dataUrls.reduce((sum, url) => sum + (typeof url === 'string' ? Math.floor((url.length * 3) / 4) : 0), 0);
+  if (totalBytes <= VISION_SKIP_RESIZE_BELOW_BYTES) return dataUrls;
   return Promise.all(dataUrls.map(resizeImageForVision));
 }
 

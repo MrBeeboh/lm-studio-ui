@@ -22,7 +22,9 @@ export async function sendMessage(model, messages, onChunk) {
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const body = await response.text();
+    const msg = body?.trim() ? `${response.status} ${response.statusText}: ${body.slice(0, 200)}` : `HTTP ${response.status}: ${response.statusText}`;
+    throw new Error(msg);
   }
 
   const reader = response.body.getReader();
@@ -48,8 +50,8 @@ export async function sendMessage(model, messages, onChunk) {
           if (content) {
             onChunk(content);
           }
-        } catch (e) {
-          console.error('Failed to parse SSE chunk:', e);
+        } catch (_) {
+          // Malformed SSE line; skip
         }
       }
     }

@@ -36,7 +36,6 @@
   const LAYOUT_OPTIONS = [
     { value: 'cockpit', label: 'Cockpit' },
     { value: 'arena', label: 'Arena' },
-    { value: 'nexus', label: 'Nexus' },
   ];
 
   function loadRecentCommands() {
