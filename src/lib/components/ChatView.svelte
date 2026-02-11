@@ -137,6 +137,8 @@
           top_p: $settings.top_p,
           top_k: $settings.top_k,
           repeat_penalty: $settings.repeat_penalty,
+          presence_penalty: $settings.presence_penalty,
+          frequency_penalty: $settings.frequency_penalty,
           stop: $settings.stop?.length ? $settings.stop : undefined,
           ttl: $settings.model_ttl_seconds,
         },

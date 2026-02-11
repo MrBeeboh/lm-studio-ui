@@ -1071,6 +1071,15 @@ body {
 .arena-question-bar {
   --arena-bar-bg: var(--ui-input-bg);
 }
+
+/* Q1, model names, and bar controls: always use clear sans-serif for readability (avoids serif from newsprint/dailyedition) */
+.arena-question-bar,
+.arena-question-bar *,
+.ui-model-selector,
+.ui-model-selector * {
+  font-family: var(--font-sans);
+}
+
 .arena-web-tab {
   color: var(--ui-text-secondary);
   background: transparent;

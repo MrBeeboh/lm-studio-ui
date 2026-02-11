@@ -83,7 +83,6 @@
   });
   /** Accordion open state in settings panel. */
   let settingsRulesExpanded = $state(false);
-  let settingsQuestionsExpanded = $state(false);
   /** Judge feedback: collapsible panel bottom-left; default collapsed. */
   let arenaJudgeFeedbackExpanded = $state(false);
   let runId = 0;
@@ -127,15 +126,6 @@
     if (typeof localStorage !== 'undefined' && arenaScores)
       localStorage.setItem('arenaScores', JSON.stringify(arenaScores));
   });
-  /** Include current standings in the next prompt so models see how they're doing. */
-  let arenaIncludeStandingsInPrompt = $state(
-    typeof localStorage !== 'undefined' ? (localStorage.getItem('arenaIncludeStandingsInPrompt') ?? '0') !== '0' : false
-  );
-  $effect(() => {
-    if (typeof localStorage !== 'undefined')
-      localStorage.setItem('arenaIncludeStandingsInPrompt', arenaIncludeStandingsInPrompt ? '1' : '0');
-  });
-
   const aborters = { A: null, B: null, C: null, D: null };
 
   const effectiveForA = $derived(mergeEffectiveSettings($dashboardModelA || '', $globalDefault, $perModelOverrides));
@@ -188,7 +178,28 @@
     }
     return '';
   });
+  /** Standing label for a slot: "Leader" | "2nd" | "3rd" (for B/C/D only). */
+  function arenaStandingLabel(slot) {
+    const s = arenaScores;
+    const order = ['B', 'C', 'D'].sort((a, b) => (s[b] ?? 0) - (s[a] ?? 0));
+    const idx = order.indexOf(slot);
+    if (idx === 0) return 'Leader';
+    if (idx === 1) return '2nd';
+    if (idx === 2) return '3rd';
+    return '—';
+  }
 
+  const ARENA_SYSTEM_PROMPT_TEMPLATES = [
+    { name: '—', prompt: '' },
+    { name: 'General', prompt: 'You are a helpful assistant.' },
+    { name: 'Code', prompt: 'You are an expert programmer. Be concise. Prefer code over prose when relevant.' },
+    { name: 'Research', prompt: 'You are a thorough researcher. Cite sources when possible. Structure answers with clear sections.' },
+    { name: 'Creative', prompt: 'You are a creative writer. Use vivid language and varied structure. Be engaging and original.' },
+  ];
+  function applySystemPromptTemplate(slot, templatePrompt) {
+    if (!templatePrompt) return;
+    setArenaSlotOverride(slot, { ...($arenaSlotOverrides[slot] ?? {}), system_prompt: templatePrompt });
+  }
   /** Helper for per-slot override inputs so we get correct event target type. Defensive against NaN/invalid. */
   function slotOverrideInput(slot, key) {
     return (e) => {
@@ -206,6 +217,26 @@
         setArenaSlotOverride(slot, { ...cur, max_tokens: safe });
       } else if (key === 'system_prompt') {
         setArenaSlotOverride(slot, { ...cur, system_prompt: typeof raw === 'string' ? raw.trim() || undefined : undefined });
+      } else if (key === 'top_p') {
+        const v = raw === '' ? undefined : parseFloat(raw);
+        const safe = v !== undefined && !Number.isNaN(v) && v >= 0 && v <= 1 ? v : cur.top_p;
+        setArenaSlotOverride(slot, { ...cur, top_p: safe });
+      } else if (key === 'top_k') {
+        const v = raw === '' ? undefined : parseInt(raw, 10);
+        const safe = v !== undefined && !Number.isNaN(v) && v >= 1 ? Math.min(200, v) : cur.top_k;
+        setArenaSlotOverride(slot, { ...cur, top_k: safe });
+      } else if (key === 'repeat_penalty') {
+        const v = raw === '' ? undefined : parseFloat(raw);
+        const safe = v !== undefined && !Number.isNaN(v) && v >= 1 && v <= 2 ? v : cur.repeat_penalty;
+        setArenaSlotOverride(slot, { ...cur, repeat_penalty: safe });
+      } else if (key === 'presence_penalty') {
+        const v = raw === '' ? undefined : parseFloat(raw);
+        const safe = v !== undefined && !Number.isNaN(v) && v >= -2 && v <= 2 ? v : cur.presence_penalty;
+        setArenaSlotOverride(slot, { ...cur, presence_penalty: safe });
+      } else if (key === 'frequency_penalty') {
+        const v = raw === '' ? undefined : parseFloat(raw);
+        const safe = v !== undefined && !Number.isNaN(v) && v >= -2 && v <= 2 ? v : cur.frequency_penalty;
+        setArenaSlotOverride(slot, { ...cur, frequency_penalty: safe });
       }
     };
   }
@@ -317,6 +348,8 @@
           top_p: slotOpts.top_p,
           top_k: slotOpts.top_k,
           repeat_penalty: slotOpts.repeat_penalty,
+          presence_penalty: slotOpts.presence_penalty,
+          frequency_penalty: slotOpts.frequency_penalty,
           stop: slotOpts.stop?.length ? slotOpts.stop : undefined,
           ttl: slotOpts.model_ttl_seconds,
         },
@@ -428,9 +461,7 @@
 
     try {
       const rulesPrefix = (typeof contestRules === 'string' ? contestRules : '').trim() ? (contestRules.trim() + '\n\n---\n\n') : '';
-      const standingsPrefix =
-        arenaIncludeStandingsInPrompt && arenaStandingsLine ? arenaStandingsLine + '\n\n---\n\n' : '';
-      const textBase = standingsPrefix + rulesPrefix + effectiveText;
+      const textBase = rulesPrefix + effectiveText;
       const urls = Array.isArray(imageDataUrls) ? imageDataUrls : [];
       const needResize = urls.length > 0 && !selected.every((s) => shouldSkipImageResizeForVision(s.modelId));
       const urlsForApi = urls.length ? (needResize ? await resizeImageDataUrlsForVision(urls) : urls) : [];
@@ -699,6 +730,8 @@
           top_p: $settings.top_p,
           top_k: $settings.top_k,
           repeat_penalty: $settings.repeat_penalty,
+          presence_penalty: $settings.presence_penalty,
+          frequency_penalty: $settings.frequency_penalty,
           stop: $settings.stop?.length ? $settings.stop : undefined,
           ttl: $settings.model_ttl_seconds,
         },
@@ -888,13 +921,7 @@
         class="flex items-center gap-2 rounded border px-2 py-1 min-h-0 transition-all"
         class:model-card-active={running.A}
         style="background-color: var(--ui-bg-main); border-color: {running.A ? '#3b82f6' : 'var(--ui-border)'};">
-        <div class="flex items-center gap-1 shrink-0">
-          <span class="text-[10px] font-bold w-4" style="color: var(--ui-text-secondary);">A</span>
-          <label class="flex items-center gap-0.5 cursor-pointer" title="Use as judge">
-            <input type="checkbox" bind:checked={$arenaSlotAIsJudge} class="rounded w-2.5 h-2.5" style="accent-color: var(--ui-accent);" />
-            <span class="text-[9px]" style="color: var(--ui-text-secondary);">J</span>
-          </label>
-        </div>
+        <span class="text-[10px] font-bold w-4 shrink-0" style="color: var(--ui-text-secondary);">A</span>
         <div class="flex-1 min-w-0"><ModelSelectorSlot slot="A" /></div>
         <span class="text-[11px] font-bold shrink-0 w-6 text-right" style="color: #3b82f6;">—</span>
       </div>
@@ -966,21 +993,35 @@
     </div>
     <!-- Group 2: Primary action -->
     <button type="button" class="arena-bar-btn primary h-8 px-4 rounded-md text-xs font-semibold shrink-0 disabled:opacity-50 transition-opacity" style="background-color: var(--ui-accent); color: var(--ui-bg-main);" disabled={$isStreaming || currentQuestionTotal === 0} onclick={askCurrentQuestion} aria-label="Ask this question" title="Send this question to the models">Ask</button>
-    <!-- Group 3: Web only (None / All / Judge) -->
+    <!-- Group 3: Web = title; user picks None | Judge only | All (same three options as Settings panel) -->
     <div class="flex items-center h-8 rounded-md border" style="border-color: var(--ui-border); background: var(--ui-input-bg);">
-      <span class="pl-2.5 pr-1.5 text-[11px] font-medium" style="color: var(--ui-text-secondary);">Web</span>
+      <span class="pl-2.5 pr-1.5 text-[11px] font-medium shrink-0" style="color: var(--ui-text-secondary);">Web</span>
       <div class="flex h-full">
-        <button type="button" class="arena-web-tab h-full px-2.5 text-[11px] font-medium" class:active={$arenaWebSearchMode === 'none'} onclick={() => { arenaWebSearchMode.set('none'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="No web">None</button>
-        <button type="button" class="arena-web-tab h-full px-2.5 text-[11px] font-medium border-l" class:active={$arenaWebSearchMode === 'all'} style="border-color: var(--ui-border);" onclick={() => { arenaWebSearchMode.set('all'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="All get web">All</button>
-        <button type="button" class="arena-web-tab h-full px-2.5 text-[11px] font-medium border-l rounded-r-md" class:active={$arenaWebSearchMode === 'judge'} style="border-color: var(--ui-border);" onclick={() => { arenaWebSearchMode.set('judge'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="Judge only">Judge</button>
+        <button type="button" class="arena-web-tab h-full px-2.5 text-[11px] font-medium" class:active={$arenaWebSearchMode === 'none'} onclick={() => { arenaWebSearchMode.set('none'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="No web search">None</button>
+        <button type="button" class="arena-web-tab h-full px-2.5 text-[11px] font-medium border-l" class:active={$arenaWebSearchMode === 'all'} style="border-color: var(--ui-border);" onclick={() => { arenaWebSearchMode.set('all'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="All models get web search">All</button>
+        <button type="button" class="arena-web-tab h-full px-2.5 text-[11px] font-medium border-l rounded-r-md" class:active={$arenaWebSearchMode === 'judge'} style="border-color: var(--ui-border);" onclick={() => { arenaWebSearchMode.set('judge'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="Only the judge (slot A) gets web search to fact-check">Judge only</button>
       </div>
     </div>
+    <!-- Spacer: Judging is its own group, not part of Web -->
+    <div class="w-2 shrink-0" aria-hidden="true"></div>
+    <!-- Group 4: Judging (run scorer for B/C/D) – separate from Web -->
     {#if $arenaSlotAIsJudge}
-      <button type="button" class="h-8 px-3 rounded-md text-xs font-semibold shrink-0 disabled:opacity-50 transition-opacity" style="background-color: var(--ui-accent); color: var(--ui-bg-main);" disabled={!canRunJudgment} onclick={() => { if (canRunJudgment) runJudgment(); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="Run judge">Judgment</button>
+      <button type="button" class="h-8 px-3 rounded-md text-xs font-semibold shrink-0 disabled:opacity-50 transition-opacity" style="background-color: var(--ui-accent); color: var(--ui-bg-main);" disabled={!canRunJudgment} onclick={() => { if (canRunJudgment) runJudgment(); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="Run the model in slot A to score B/C/D responses">Judgment</button>
     {/if}
-    <!-- Right spacer: keeps Settings on the right, balances left spacer -->
+    <!-- Right spacer: keeps Reset + Settings on the right -->
     <div class="flex-1 min-w-4"></div>
-    <!-- Settings: far right, labeled -->
+    <!-- Reset scores: visible so you can start a new competition -->
+    <button
+      type="button"
+      class="flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs font-medium shrink-0 transition-opacity hover:opacity-90"
+      style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-secondary);"
+      onclick={confirmResetScores}
+      aria-label="Reset all scores"
+      title="Set B/C/D scores back to 0 and start a new competition">
+      <span aria-hidden="true">↺</span>
+      <span>Reset scores</span>
+    </button>
+    <!-- Settings -->
     <button
       type="button"
       class="flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs font-medium shrink-0 transition-opacity hover:opacity-90"
@@ -1000,7 +1041,13 @@
     style="grid-template-columns: {responsiveGridCols};">
     {#if $arenaPanelCount >= 1}
     <div class="flex flex-col min-h-0 h-full overflow-hidden rounded-lg atom-panel-wrap border" style="background-color: var(--ui-bg-main); border-color: var(--ui-border);" role="region" aria-label="Model A panel" in:fly={{ x: 200, duration: 800, easing: quintOut }}>
-      <div class="shrink-0 px-2 py-1 border-b text-[11px] font-medium" style="color: var(--ui-text-secondary); border-color: var(--ui-border);">A</div>
+      <div class="shrink-0 flex items-center justify-between gap-2 px-2 py-1.5 border-b text-[11px]" style="color: var(--ui-text-secondary); border-color: var(--ui-border);">
+        <span class="font-medium">A</span>
+        <label class="flex items-center gap-1.5 cursor-pointer select-none" title="When on, this model scores B/C/D responses when you click Judgment">
+          <input type="checkbox" bind:checked={$arenaSlotAIsJudge} class="rounded w-3 h-3" style="accent-color: var(--ui-accent);" />
+          <span style="color: var(--ui-text-primary);">Use as judge</span>
+        </label>
+      </div>
       {#if slotErrors.A}<div class="shrink-0 px-2 py-0.5 text-[10px]" style="color: var(--ui-accent-hot);">{slotErrors.A}</div>{/if}
       {#if optionsOpenSlot === 'A'}
         <div class="shrink-0 p-2 border-b text-xs" style="border-color: var(--ui-border); background-color: var(--ui-input-bg);">
@@ -1010,8 +1057,18 @@
             <input id="arena-opt-a-temp" type="number" step="0.1" min="0" max="2" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.A?.temperature ?? effectiveForA.temperature} oninput={slotOverrideInput('A', 'temperature')} />
             <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-a-max">Max tokens</label>
             <input id="arena-opt-a-max" type="number" min="1" max="100000" step="1" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.A?.max_tokens ?? effectiveForA.max_tokens} oninput={slotOverrideInput('A', 'max_tokens')} />
+            <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-a-top_p">Top-P</label>
+            <input id="arena-opt-a-top_p" type="number" step="0.05" min="0" max="1" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.A?.top_p ?? effectiveForA.top_p} oninput={slotOverrideInput('A', 'top_p')} />
+            <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-a-top_k">Top-K</label>
+            <input id="arena-opt-a-top_k" type="number" min="1" max="200" step="1" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.A?.top_k ?? effectiveForA.top_k} oninput={slotOverrideInput('A', 'top_k')} />
+            <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-a-rp">Repeat penalty</label>
+            <input id="arena-opt-a-rp" type="number" step="0.05" min="1" max="2" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.A?.repeat_penalty ?? effectiveForA.repeat_penalty} oninput={slotOverrideInput('A', 'repeat_penalty')} />
           </div>
-          <label class="block mt-1.5 text-zinc-500 dark:text-zinc-400" for="arena-opt-a-sys">System prompt (optional)</label>
+          <label class="block mt-1.5 text-zinc-500 dark:text-zinc-400">System prompt template</label>
+          <select class="w-full mb-0.5 px-1.5 py-0.5 rounded border text-xs" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" onchange={(e) => { const opt = ARENA_SYSTEM_PROMPT_TEMPLATES.find((t) => t.name === e.currentTarget?.value); if (opt?.prompt) applySystemPromptTemplate('A', opt.prompt); }} aria-label="System prompt template">
+            {#each ARENA_SYSTEM_PROMPT_TEMPLATES as t}<option value={t.name}>{t.name}</option>{/each}
+          </select>
+          <label class="block mt-1 text-zinc-500 dark:text-zinc-400" for="arena-opt-a-sys">System prompt (optional)</label>
           <textarea id="arena-opt-a-sys" rows="2" class="w-full mt-0.5 px-1.5 py-1 rounded border text-xs resize-y" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" placeholder="Leave blank to use Arena default" value={$arenaSlotOverrides.A?.system_prompt ?? ''} oninput={slotOverrideInput('A', 'system_prompt')}></textarea>
           <button type="button" class="mt-1.5 text-[10px] underline opacity-80 hover:opacity-100" style="color: var(--ui-text-secondary);" onclick={() => setArenaSlotOverride('A', null)}>Reset to Arena default</button>
         </div>
@@ -1020,7 +1077,7 @@
         {#if !$dashboardModelA}
           <div class="text-sm" style="color: var(--ui-text-secondary);">Select a model to start.</div>
         {:else if $arenaSlotAIsJudge && messagesA.length === 0}
-          <div class="text-sm" style="color: var(--ui-text-secondary);">Judge — run a prompt so B/C/D respond, then click <strong>Judgment time</strong> below.</div>
+          <div class="text-sm" style="color: var(--ui-text-secondary);">Run a question so B/C/D respond, then click <strong>Judgment</strong> in the bar to score them.</div>
         {:else if messagesA.length === 0}
           <div class="text-sm" style="color: var(--ui-text-secondary);">No responses yet.</div>
         {:else}
@@ -1063,8 +1120,18 @@
             <input id="arena-opt-b-temp" type="number" step="0.1" min="0" max="2" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.B?.temperature ?? effectiveForB.temperature} oninput={slotOverrideInput('B', 'temperature')} />
             <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-b-max">Max tokens</label>
             <input id="arena-opt-b-max" type="number" min="1" max="100000" step="1" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.B?.max_tokens ?? effectiveForB.max_tokens} oninput={slotOverrideInput('B', 'max_tokens')} />
+            <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-b-top_p">Top-P</label>
+            <input id="arena-opt-b-top_p" type="number" step="0.05" min="0" max="1" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.B?.top_p ?? effectiveForB.top_p} oninput={slotOverrideInput('B', 'top_p')} />
+            <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-b-top_k">Top-K</label>
+            <input id="arena-opt-b-top_k" type="number" min="1" max="200" step="1" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.B?.top_k ?? effectiveForB.top_k} oninput={slotOverrideInput('B', 'top_k')} />
+            <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-b-rp">Repeat penalty</label>
+            <input id="arena-opt-b-rp" type="number" step="0.05" min="1" max="2" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.B?.repeat_penalty ?? effectiveForB.repeat_penalty} oninput={slotOverrideInput('B', 'repeat_penalty')} />
           </div>
-          <label class="block mt-1.5 text-zinc-500 dark:text-zinc-400" for="arena-opt-b-sys">System prompt (optional)</label>
+          <label class="block mt-1.5 text-zinc-500 dark:text-zinc-400">System prompt template</label>
+          <select class="w-full mb-0.5 px-1.5 py-0.5 rounded border text-xs" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" onchange={(e) => { const opt = ARENA_SYSTEM_PROMPT_TEMPLATES.find((t) => t.name === e.currentTarget?.value); if (opt?.prompt) applySystemPromptTemplate('B', opt.prompt); }} aria-label="System prompt template">
+            {#each ARENA_SYSTEM_PROMPT_TEMPLATES as t}<option value={t.name}>{t.name}</option>{/each}
+          </select>
+          <label class="block mt-1 text-zinc-500 dark:text-zinc-400" for="arena-opt-b-sys">System prompt (optional)</label>
           <textarea id="arena-opt-b-sys" rows="2" class="w-full mt-0.5 px-1.5 py-1 rounded border text-xs resize-y" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" placeholder="Leave blank to use Arena default" value={$arenaSlotOverrides.B?.system_prompt ?? ''} oninput={slotOverrideInput('B', 'system_prompt')}></textarea>
           <button type="button" class="mt-1.5 text-[10px] underline opacity-80 hover:opacity-100" style="color: var(--ui-text-secondary);" onclick={() => setArenaSlotOverride('B', null)}>Reset to Arena default</button>
         </div>
@@ -1082,7 +1149,11 @@
           </div>
         {/if}
       </div>
-      <div class="shrink-0 flex justify-end items-center gap-1.5 px-2 py-1.5 border-t text-[11px]" style="border-color: var(--ui-border);">
+      <div class="shrink-0 flex justify-between items-center gap-2 px-2 py-1.5 border-t text-[11px]" style="border-color: var(--ui-border);">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="font-semibold tabular-nums shrink-0" style="color: #10b981;">{arenaScores.B} pts</span>
+          <span class="text-[10px] font-medium uppercase tracking-wide opacity-90" style="color: var(--ui-text-secondary);">{arenaStandingLabel('B')}</span>
+        </div>
         <div class="flex items-center gap-1">
           <button type="button" class="arena-panel-options-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-opacity hover:opacity-90" style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);" onclick={() => optionsOpenSlot = optionsOpenSlot === 'B' ? null : 'B'} aria-label="Model B options" aria-expanded={optionsOpenSlot === 'B'} title="Model B options">⚙ <span>Options</span></button>
           {#if running.B}<span style="color: var(--ui-accent);">Running…</span>{:else if tpsB}{@const c = Number(tpsB) >= 40 ? 'var(--atom-teal)' : Number(tpsB) >= 20 ? 'var(--atom-amber)' : 'var(--atom-accent)'}<span class="font-mono px-1.5 py-0.5 rounded" style="background: color-mix(in srgb, {c} 20%, transparent); color: {c};">{tpsB} t/s</span>{/if}
@@ -1114,8 +1185,18 @@
             <input id="arena-opt-c-temp" type="number" step="0.1" min="0" max="2" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.C?.temperature ?? effectiveForC.temperature} oninput={slotOverrideInput('C', 'temperature')} />
             <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-c-max">Max tokens</label>
             <input id="arena-opt-c-max" type="number" min="1" max="100000" step="1" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.C?.max_tokens ?? effectiveForC.max_tokens} oninput={slotOverrideInput('C', 'max_tokens')} />
+            <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-c-top_p">Top-P</label>
+            <input id="arena-opt-c-top_p" type="number" step="0.05" min="0" max="1" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.C?.top_p ?? effectiveForC.top_p} oninput={slotOverrideInput('C', 'top_p')} />
+            <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-c-top_k">Top-K</label>
+            <input id="arena-opt-c-top_k" type="number" min="1" max="200" step="1" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.C?.top_k ?? effectiveForC.top_k} oninput={slotOverrideInput('C', 'top_k')} />
+            <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-c-rp">Repeat penalty</label>
+            <input id="arena-opt-c-rp" type="number" step="0.05" min="1" max="2" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.C?.repeat_penalty ?? effectiveForC.repeat_penalty} oninput={slotOverrideInput('C', 'repeat_penalty')} />
           </div>
-          <label class="block mt-1.5 text-zinc-500 dark:text-zinc-400" for="arena-opt-c-sys">System prompt (optional)</label>
+          <label class="block mt-1.5 text-zinc-500 dark:text-zinc-400">System prompt template</label>
+          <select class="w-full mb-0.5 px-1.5 py-0.5 rounded border text-xs" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" onchange={(e) => { const opt = ARENA_SYSTEM_PROMPT_TEMPLATES.find((t) => t.name === e.currentTarget?.value); if (opt?.prompt) applySystemPromptTemplate('C', opt.prompt); }} aria-label="System prompt template">
+            {#each ARENA_SYSTEM_PROMPT_TEMPLATES as t}<option value={t.name}>{t.name}</option>{/each}
+          </select>
+          <label class="block mt-1 text-zinc-500 dark:text-zinc-400" for="arena-opt-c-sys">System prompt (optional)</label>
           <textarea id="arena-opt-c-sys" rows="2" class="w-full mt-0.5 px-1.5 py-1 rounded border text-xs resize-y" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" placeholder="Leave blank to use Arena default" value={$arenaSlotOverrides.C?.system_prompt ?? ''} oninput={slotOverrideInput('C', 'system_prompt')}></textarea>
           <button type="button" class="mt-1.5 text-[10px] underline opacity-80 hover:opacity-100" style="color: var(--ui-text-secondary);" onclick={() => setArenaSlotOverride('C', null)}>Reset to Arena default</button>
         </div>
@@ -1133,7 +1214,11 @@
           </div>
         {/if}
       </div>
-      <div class="shrink-0 flex justify-end items-center gap-1.5 px-2 py-1.5 border-t text-[11px]" style="border-color: var(--ui-border);">
+      <div class="shrink-0 flex justify-between items-center gap-2 px-2 py-1.5 border-t text-[11px]" style="border-color: var(--ui-border);">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="font-semibold tabular-nums shrink-0" style="color: #f59e0b;">{arenaScores.C} pts</span>
+          <span class="text-[10px] font-medium uppercase tracking-wide opacity-90" style="color: var(--ui-text-secondary);">{arenaStandingLabel('C')}</span>
+        </div>
         <div class="flex items-center gap-1">
           <button type="button" class="arena-panel-options-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-opacity hover:opacity-90" style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);" onclick={() => optionsOpenSlot = optionsOpenSlot === 'C' ? null : 'C'} aria-label="Model C options" aria-expanded={optionsOpenSlot === 'C'} title="Model C options">⚙ <span>Options</span></button>
           {#if running.C}<span style="color: var(--ui-accent);">Running…</span>{:else if tpsC}{@const c = Number(tpsC) >= 40 ? 'var(--atom-teal)' : Number(tpsC) >= 20 ? 'var(--atom-amber)' : 'var(--atom-accent)'}<span class="font-mono px-1.5 py-0.5 rounded" style="background: color-mix(in srgb, {c} 20%, transparent); color: {c};">{tpsC} t/s</span>{/if}
@@ -1165,8 +1250,18 @@
             <input id="arena-opt-d-temp" type="number" step="0.1" min="0" max="2" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.D?.temperature ?? effectiveForD.temperature} oninput={slotOverrideInput('D', 'temperature')} />
             <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-d-max">Max tokens</label>
             <input id="arena-opt-d-max" type="number" min="1" max="100000" step="1" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.D?.max_tokens ?? effectiveForD.max_tokens} oninput={slotOverrideInput('D', 'max_tokens')} />
+            <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-d-top_p">Top-P</label>
+            <input id="arena-opt-d-top_p" type="number" step="0.05" min="0" max="1" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.D?.top_p ?? effectiveForD.top_p} oninput={slotOverrideInput('D', 'top_p')} />
+            <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-d-top_k">Top-K</label>
+            <input id="arena-opt-d-top_k" type="number" min="1" max="200" step="1" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.D?.top_k ?? effectiveForD.top_k} oninput={slotOverrideInput('D', 'top_k')} />
+            <label class="text-zinc-500 dark:text-zinc-400" for="arena-opt-d-rp">Repeat penalty</label>
+            <input id="arena-opt-d-rp" type="number" step="0.05" min="1" max="2" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides.D?.repeat_penalty ?? effectiveForD.repeat_penalty} oninput={slotOverrideInput('D', 'repeat_penalty')} />
           </div>
-          <label class="block mt-1.5 text-zinc-500 dark:text-zinc-400" for="arena-opt-d-sys">System prompt (optional)</label>
+          <label class="block mt-1.5 text-zinc-500 dark:text-zinc-400">System prompt template</label>
+          <select class="w-full mb-0.5 px-1.5 py-0.5 rounded border text-xs" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" onchange={(e) => { const opt = ARENA_SYSTEM_PROMPT_TEMPLATES.find((t) => t.name === e.currentTarget?.value); if (opt?.prompt) applySystemPromptTemplate('D', opt.prompt); }} aria-label="System prompt template">
+            {#each ARENA_SYSTEM_PROMPT_TEMPLATES as t}<option value={t.name}>{t.name}</option>{/each}
+          </select>
+          <label class="block mt-1 text-zinc-500 dark:text-zinc-400" for="arena-opt-d-sys">System prompt (optional)</label>
           <textarea id="arena-opt-d-sys" rows="2" class="w-full mt-0.5 px-1.5 py-1 rounded border text-xs resize-y" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" placeholder="Leave blank to use Arena default" value={$arenaSlotOverrides.D?.system_prompt ?? ''} oninput={slotOverrideInput('D', 'system_prompt')}></textarea>
           <button type="button" class="mt-1.5 text-[10px] underline opacity-80 hover:opacity-100" style="color: var(--ui-text-secondary);" onclick={() => setArenaSlotOverride('D', null)}>Reset to Arena default</button>
         </div>
@@ -1184,7 +1279,11 @@
           </div>
         {/if}
       </div>
-      <div class="shrink-0 flex justify-end items-center gap-1.5 px-2 py-1.5 border-t text-[11px]" style="border-color: var(--ui-border);">
+      <div class="shrink-0 flex justify-between items-center gap-2 px-2 py-1.5 border-t text-[11px]" style="border-color: var(--ui-border);">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="font-semibold tabular-nums shrink-0" style="color: #8b5cf6;">{arenaScores.D} pts</span>
+          <span class="text-[10px] font-medium uppercase tracking-wide opacity-90" style="color: var(--ui-text-secondary);">{arenaStandingLabel('D')}</span>
+        </div>
         <div class="flex items-center gap-1">
           <button type="button" class="arena-panel-options-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-opacity hover:opacity-90" style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);" onclick={() => optionsOpenSlot = optionsOpenSlot === 'D' ? null : 'D'} aria-label="Model D options" aria-expanded={optionsOpenSlot === 'D'} title="Model D options">⚙ <span>Options</span></button>
           {#if running.D}<span style="color: var(--ui-accent);">Running…</span>{:else if tpsD}{@const c = Number(tpsD) >= 40 ? 'var(--atom-teal)' : Number(tpsD) >= 20 ? 'var(--atom-amber)' : 'var(--atom-accent)'}<span class="font-mono px-1.5 py-0.5 rounded" style="background: color-mix(in srgb, {c} 20%, transparent); color: {c};">{tpsD} t/s</span>{/if}
@@ -1241,7 +1340,7 @@
             id="arena-judge-feedback"
             class="w-full px-3 py-2 text-xs resize-y min-h-20 max-h-32"
             style="background-color: var(--ui-input-bg); color: var(--ui-text-primary); border: none;"
-            placeholder="Paste correction for judge. Then run Judgment time."
+            placeholder="Paste correction for the judge. Then run Judgment."
             rows="3"
             bind:value={judgeFeedback}
           ></textarea>
@@ -1282,26 +1381,41 @@
           <button type="button" class="p-2 rounded-lg hover:opacity-80" style="color: var(--ui-text-secondary);" onclick={() => arenaSettingsOpen = false} aria-label="Close">×</button>
         </div>
         <div class="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-          <!-- Answer Key (first section) -->
+          <!-- 1. Questions – first: this is what you run the contest with -->
           <section>
-            <h3 class="font-semibold text-sm mb-2" style="color: var(--ui-text-primary);">Answer Key</h3>
-            <p class="text-xs mb-3" style="color: var(--ui-text-secondary);">Optional: Judge will reference this when scoring. Can also use web search or own knowledge.</p>
+            <h3 class="font-semibold text-sm mb-1" style="color: var(--ui-text-primary);">Questions</h3>
+            <p class="text-xs mb-3" style="color: var(--ui-text-secondary);">Paste your contest questions here. Number them (1. … 2. … or 1) … 2) …). They drive the Q1–Q20 selector and the Ask button.</p>
+            <textarea
+              id="arena-questions-list-settings"
+              class="w-full rounded-md resize-y text-[13px]"
+              style="padding: 12px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 160px;"
+              placeholder="1. First question text here
+2. Second question
+3. Third question
+..."
+              rows="8"
+              bind:value={questionsList}
+            ></textarea>
+            {#if parsedQuestions.length > 0}
+              <p class="text-[11px] mt-1.5 font-medium" style="color: var(--ui-accent);">{parsedQuestions.length} question{parsedQuestions.length === 1 ? '' : 's'} loaded</p>
+            {/if}
+          </section>
+          <!-- 2. Answer Key (optional, for judge) -->
+          <section>
+            <h3 class="font-semibold text-sm mb-1" style="color: var(--ui-text-primary);">Answer Key</h3>
+            <p class="text-xs mb-3" style="color: var(--ui-text-secondary);">Optional. Judge will use this when scoring. Can also rely on web search or its own knowledge.</p>
             <textarea
               id="answer_key_input"
               class="w-full rounded-md resize-y font-mono text-[13px]"
-              style="padding: 12px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); margin-bottom: 12px;"
-              placeholder="Paste answer key here (optional)
-
-Format:
-1. Answer to Q1
+              style="padding: 12px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 120px;"
+              placeholder="1. Answer to Q1
 2. Answer to Q2
-3. Answer to Q3
 ..."
-              rows="10"
+              rows="6"
               bind:value={answerKey}
             ></textarea>
           </section>
-          <!-- Contest rules (accordion, collapsed by default) -->
+          <!-- 3. Contest rules (accordion, collapsed by default) -->
           <section>
             <button
               type="button"
@@ -1323,38 +1437,12 @@ Format:
               ></textarea>
             {/if}
           </section>
-          <!-- Browse questions -->
-          <section>
-            <button
-              type="button"
-              class="w-full flex items-center justify-between text-left font-semibold text-sm mb-3"
-              style="color: var(--ui-text-primary);"
-              onclick={() => settingsQuestionsExpanded = !settingsQuestionsExpanded}
-              aria-expanded={settingsQuestionsExpanded}>
-              Browse questions
-              <span aria-hidden="true">{settingsQuestionsExpanded ? '▼' : '▶'}</span>
-            </button>
-            {#if settingsQuestionsExpanded}
-              <textarea
-                id="arena-questions-list-settings"
-                class="w-full px-3 py-2 rounded-lg border text-xs resize-y max-h-[200px]"
-                style="border-color: var(--ui-border); background-color: var(--ui-input-bg); color: var(--ui-text-primary);"
-                placeholder="Paste numbered questions (1. … 2. …). Next sends the next one."
-                rows="4"
-                bind:value={questionsList}
-              ></textarea>
-            {/if}
-          </section>
           <!-- Execution mode -->
           <section>
             <h3 class="font-semibold text-sm mb-3" style="color: var(--ui-text-primary);">Execution mode</h3>
-            <label class="flex items-start gap-2 cursor-pointer text-sm mb-2" style="color: var(--ui-text-secondary);">
+            <label class="flex items-start gap-2 cursor-pointer text-sm" style="color: var(--ui-text-secondary);">
               <input type="checkbox" bind:checked={sequential} class="rounded mt-0.5" style="accent-color: var(--ui-accent);" onchange={() => { if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} />
               <span>Sequential (one at a time). Off = parallel.</span>
-            </label>
-            <label class="flex items-start gap-2 cursor-pointer text-sm" style="color: var(--ui-text-secondary);">
-              <input type="checkbox" bind:checked={arenaIncludeStandingsInPrompt} class="rounded mt-0.5" style="accent-color: var(--ui-accent);" />
-              <span>Tell models their standings</span>
             </label>
           </section>
           <!-- Web search -->
@@ -1363,12 +1451,13 @@ Format:
             <div class="flex rounded-lg border overflow-hidden" style="border-color: var(--ui-border);">
               <button type="button" class="flex-1 px-2 py-1.5 text-xs font-medium transition-colors" class:opacity-70={$arenaWebSearchMode !== 'none'} style="border-color: var(--ui-border); background: {$arenaWebSearchMode === 'none' ? 'var(--ui-sidebar-active)' : 'transparent'}; color: {$arenaWebSearchMode === 'none' ? 'var(--ui-text-primary)' : 'var(--ui-text-secondary)'}" onclick={() => { arenaWebSearchMode.set('none'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }}>None</button>
               <button type="button" class="flex-1 px-2 py-1.5 text-xs font-medium transition-colors border-l" class:opacity-70={$arenaWebSearchMode !== 'all'} style="border-color: var(--ui-border); background: {$arenaWebSearchMode === 'all' ? 'var(--ui-sidebar-active)' : 'transparent'}; color: {$arenaWebSearchMode === 'all' ? 'var(--ui-text-primary)' : 'var(--ui-text-secondary)'}" onclick={() => { arenaWebSearchMode.set('all'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }}>All</button>
-              <button type="button" class="flex-1 px-2 py-1.5 text-xs font-medium transition-colors border-l" class:opacity-70={$arenaWebSearchMode !== 'judge'} style="border-color: var(--ui-border); background: {$arenaWebSearchMode === 'judge' ? 'var(--ui-sidebar-active)' : 'transparent'}; color: {$arenaWebSearchMode === 'judge' ? 'var(--ui-text-primary)' : 'var(--ui-text-secondary)'}" onclick={() => { arenaWebSearchMode.set('judge'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }}>Judge</button>
+              <button type="button" class="flex-1 px-2 py-1.5 text-xs font-medium transition-colors border-l" class:opacity-70={$arenaWebSearchMode !== 'judge'} style="border-color: var(--ui-border); background: {$arenaWebSearchMode === 'judge' ? 'var(--ui-sidebar-active)' : 'transparent'}; color: {$arenaWebSearchMode === 'judge' ? 'var(--ui-text-primary)' : 'var(--ui-text-secondary)'}" onclick={() => { arenaWebSearchMode.set('judge'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }}>Judge only</button>
             </div>
           </section>
           <!-- Actions -->
           <section>
             <h3 class="font-semibold text-sm mb-3" style="color: var(--ui-text-primary);">Actions</h3>
+            <p class="text-xs mb-2" style="color: var(--ui-text-secondary);">Reset all scores sets B/C/D back to 0 so you can start a new competition. You can also use <strong>Reset scores</strong> in the bar above.</p>
             <div class="flex flex-col gap-2">
               <button
                 type="button"

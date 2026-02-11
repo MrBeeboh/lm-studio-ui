@@ -199,6 +199,8 @@ const DEFAULT_SETTINGS = {
   top_p: 0.95,
   top_k: 64,
   repeat_penalty: 1.15,
+  presence_penalty: 0,
+  frequency_penalty: 0,
   stop: [],
   model_ttl_seconds: 0,
   audio_enabled: readBool('audio_enabled', true),

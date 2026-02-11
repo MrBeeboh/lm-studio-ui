@@ -10,6 +10,8 @@
     selectedModelId,
     activeMessages,
     models,
+    globalDefault,
+    perModelOverrides,
     updateGlobalDefault,
     setPerModelOverride,
     hardware,
@@ -28,6 +30,9 @@
   let temperature = $state(0.7);
   let topP = $state(0.95);
   let topK = $state(64);
+  let repeatPenalty = $state(1.15);
+  let presencePenalty = $state(0);
+  let frequencyPenalty = $state(0);
   let sysPrompt = $state('You are a helpful assistant.');
   let currentModelId = $state('');
   let messagesList = $state([]);
@@ -47,6 +52,13 @@
     n_parallel: 4,
     model_ttl_seconds: 0,
   };
+  const SYSTEM_PROMPT_TEMPLATES = [
+    { name: 'Custom', prompt: '' },
+    { name: 'General', prompt: 'You are a helpful assistant.' },
+    { name: 'Code', prompt: 'You are an expert programmer. Be concise. Prefer code over prose when relevant.' },
+    { name: 'Research', prompt: 'You are a thorough researcher. Cite sources when possible. Structure answers with clear sections.' },
+    { name: 'Creative', prompt: 'You are a creative writer. Use vivid language and varied structure. Be engaging and original.' },
+  ];
   const GPU_OFFLOAD_OPTIONS = [
     { value: 'max', label: 'Max' },
     { value: '1', label: '100%' },
@@ -87,6 +99,9 @@
       temperature = s?.temperature ?? 0.7;
       topP = s?.top_p ?? 0.95;
       topK = s?.top_k ?? 64;
+      repeatPenalty = s?.repeat_penalty ?? 1.15;
+      presencePenalty = s?.presence_penalty ?? 0;
+      frequencyPenalty = s?.frequency_penalty ?? 0;
       sysPrompt = (s?.system_prompt ?? 'You are a helpful assistant.').toString();
     });
     return () => unsub();
@@ -103,8 +118,14 @@
       return acc + Math.ceil((text?.length ?? 0) / 4);
     }, 0)
   );
+  const CONTEXT_CAPACITY_MAX = 131072;
   const contextPercent = $derived(
     contextLength > 0 ? Math.min(100, Math.round((estimatedContextUsed / contextLength) * 100)) : 0
+  );
+  /** Capacity left in the pool when you delegate contextLength to this chat (complement of delegated). */
+  const capacityRemaining = $derived(Math.max(0, CONTEXT_CAPACITY_MAX - contextLength));
+  const capacityRemainingPercent = $derived(
+    CONTEXT_CAPACITY_MAX > 0 ? Math.round((capacityRemaining / CONTEXT_CAPACITY_MAX) * 100) : 0
   );
 
   function onTempInput(e) {
@@ -123,6 +144,18 @@
     const v = parseInt(e.target.value, 10);
     if (Number.isFinite(v)) contextLength = Math.max(512, Math.min(131072, v));
   }
+  function onRepeatPenaltyInput(e) {
+    const v = parseFloat(e.target.value);
+    if (Number.isFinite(v)) repeatPenalty = Math.max(1, Math.min(2, v));
+  }
+  function onPresencePenaltyInput(e) {
+    const v = parseFloat(e.target.value);
+    if (Number.isFinite(v)) presencePenalty = Math.max(-2, Math.min(2, v));
+  }
+  function onFrequencyPenaltyInput(e) {
+    const v = parseFloat(e.target.value);
+    if (Number.isFinite(v)) frequencyPenalty = Math.max(-2, Math.min(2, v));
+  }
 
   async function save() {
     if (!currentModelId) {
@@ -136,6 +169,9 @@
         temperature,
         top_p: topP,
         top_k: topK,
+        repeat_penalty: repeatPenalty,
+        presence_penalty: presencePenalty,
+        frequency_penalty: frequencyPenalty,
         system_prompt: sysPrompt.trim() || undefined,
         context_length: contextLength,
         eval_batch_size: evalBatchSize,
@@ -170,6 +206,114 @@
 
   function openSettings() {
     settingsOpen.set(true);
+  }
+
+  const PRESETS_STORAGE_KEY = 'intelPresets';
+  function getPresetList() {
+    if (typeof localStorage === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(PRESETS_STORAGE_KEY);
+      const o = raw ? JSON.parse(raw) : {};
+      return Object.keys(o).filter(Boolean).sort();
+    } catch {
+      return [];
+    }
+  }
+  let presetNames = $state(getPresetList());
+  let newPresetName = $state('');
+  let importInputEl = $state(/** @type {HTMLInputElement | null} */ (null));
+
+  function exportSettings() {
+    const data = {
+      globalDefault: get(globalDefault),
+      perModelOverrides: get(perModelOverrides),
+      exportedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `atom-settings-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  function triggerImport() {
+    importInputEl?.click();
+  }
+  function onImportFile(e) {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = typeof reader.result === 'string' ? reader.result : '';
+        const data = JSON.parse(text);
+        if (data.globalDefault && typeof data.globalDefault === 'object') {
+          updateGlobalDefault(data.globalDefault);
+        }
+        if (data.perModelOverrides && typeof data.perModelOverrides === 'object') {
+          perModelOverrides.set(data.perModelOverrides);
+        }
+        presetNames = getPresetList();
+      } catch (err) {
+        console.error('Import failed', err);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }
+  function saveAsPreset() {
+    const name = newPresetName.trim();
+    if (!name) return;
+    const payload = {
+      temperature,
+      top_p: topP,
+      top_k: topK,
+      repeat_penalty: repeatPenalty,
+      presence_penalty: presencePenalty,
+      frequency_penalty: frequencyPenalty,
+      system_prompt: sysPrompt.trim() || undefined,
+      context_length: contextLength,
+      eval_batch_size: evalBatchSize,
+      flash_attention: flashAttention,
+      offload_kv_cache_to_gpu: offloadKvToGpu,
+      gpu_offload: gpuOffload,
+      cpu_threads: cpuThreads,
+      n_parallel: nParallel,
+      model_ttl_seconds: modelTtlSeconds,
+    };
+    try {
+      const raw = localStorage.getItem(PRESETS_STORAGE_KEY);
+      const o = raw ? JSON.parse(raw) : {};
+      o[name] = payload;
+      localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(o));
+      presetNames = getPresetList();
+      newPresetName = '';
+    } catch (_) {}
+  }
+  function loadPreset(name) {
+    try {
+      const raw = localStorage.getItem(PRESETS_STORAGE_KEY);
+      const o = raw ? JSON.parse(raw) : {};
+      const p = o[name];
+      if (!p || typeof p !== 'object') return;
+      if (p.temperature != null) temperature = p.temperature;
+      if (p.top_p != null) topP = p.top_p;
+      if (p.top_k != null) topK = p.top_k;
+      if (p.repeat_penalty != null) repeatPenalty = p.repeat_penalty;
+      if (p.presence_penalty != null) presencePenalty = p.presence_penalty;
+      if (p.frequency_penalty != null) frequencyPenalty = p.frequency_penalty;
+      if (p.system_prompt != null) sysPrompt = String(p.system_prompt);
+      if (p.context_length != null) contextLength = p.context_length;
+      if (p.eval_batch_size != null) evalBatchSize = p.eval_batch_size;
+      if (p.flash_attention != null) flashAttention = p.flash_attention;
+      if (p.offload_kv_cache_to_gpu != null) offloadKvToGpu = p.offload_kv_cache_to_gpu;
+      if (p.gpu_offload != null) gpuOffload = p.gpu_offload;
+      if (p.cpu_threads != null) cpuThreads = p.cpu_threads;
+      if (p.n_parallel != null) nParallel = p.n_parallel;
+      if (p.model_ttl_seconds != null) modelTtlSeconds = p.model_ttl_seconds;
+      updateGlobalDefault(p);
+      if (currentModelId) setPerModelOverride(currentModelId, p);
+    } catch (_) {}
   }
 
   async function openHfLookup() {
@@ -220,6 +364,9 @@
         temperature = payload.temperature ?? temperature;
         topP = payload.top_p ?? topP;
         topK = payload.top_k ?? topK;
+        repeatPenalty = payload.repeat_penalty ?? repeatPenalty;
+        presencePenalty = payload.presence_penalty ?? presencePenalty;
+        frequencyPenalty = payload.frequency_penalty ?? frequencyPenalty;
         evalBatchSize = payload.eval_batch_size ?? evalBatchSize;
         cpuThreads = payload.cpu_threads ?? cpuThreads;
         nParallel = payload.n_parallel ?? nParallel;
@@ -287,6 +434,9 @@
       temperature = payload.temperature ?? temperature;
       topP = payload.top_p ?? topP;
       topK = payload.top_k ?? topK;
+      repeatPenalty = payload.repeat_penalty ?? repeatPenalty;
+      presencePenalty = payload.presence_penalty ?? presencePenalty;
+      frequencyPenalty = payload.frequency_penalty ?? frequencyPenalty;
       evalBatchSize = payload.eval_batch_size ?? evalBatchSize;
       cpuThreads = payload.cpu_threads ?? cpuThreads;
       nParallel = payload.n_parallel ?? nParallel;
@@ -336,6 +486,18 @@
         <span class="w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[9px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span>
       </InfoTooltip>
     </div>
+    <select
+      class="w-full mb-1 px-1.5 py-1 rounded border text-xs"
+      style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
+      onchange={(e) => {
+        const opt = SYSTEM_PROMPT_TEMPLATES.find((t) => t.name === e.currentTarget?.value);
+        if (opt && opt.prompt) sysPrompt = opt.prompt;
+      }}
+      aria-label="System prompt template">
+      {#each SYSTEM_PROMPT_TEMPLATES as t}
+        <option value={t.name}>{t.name}</option>
+      {/each}
+    </select>
     <textarea
       id="intel-sys-prompt"
       class="w-full px-1.5 py-1 rounded border text-xs resize-y min-h-[72px]"
@@ -434,6 +596,42 @@
           style="background: var(--ui-input-bg); accent-color: var(--ui-accent);" />
       </div>
       <div>
+        <div class="flex justify-between text-xs mb-0.5"><span>Repeat penalty<InfoTooltip text="Penalize repeated tokens. Higher = less repetition."><span class="ml-0.5 w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip></span><span class="font-mono">{repeatPenalty}</span></div>
+        <input
+          type="range"
+          min="1"
+          max="2"
+          step="0.05"
+          value={repeatPenalty}
+          oninput={onRepeatPenaltyInput}
+          class="w-full h-1.5 rounded-full"
+          style="background: var(--ui-input-bg); accent-color: var(--ui-accent);" />
+      </div>
+      <div>
+        <div class="flex justify-between text-xs mb-0.5"><span>Presence penalty<InfoTooltip text="Penalize tokens that already appear in the context. -2 to 2."><span class="ml-0.5 w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip></span><span class="font-mono">{presencePenalty}</span></div>
+        <input
+          type="range"
+          min="-2"
+          max="2"
+          step="0.1"
+          value={presencePenalty}
+          oninput={onPresencePenaltyInput}
+          class="w-full h-1.5 rounded-full"
+          style="background: var(--ui-input-bg); accent-color: var(--ui-accent);" />
+      </div>
+      <div>
+        <div class="flex justify-between text-xs mb-0.5"><span>Frequency penalty<InfoTooltip text="Penalize tokens by how often they appear. -2 to 2."><span class="ml-0.5 w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip></span><span class="font-mono">{frequencyPenalty}</span></div>
+        <input
+          type="range"
+          min="-2"
+          max="2"
+          step="0.1"
+          value={frequencyPenalty}
+          oninput={onFrequencyPenaltyInput}
+          class="w-full h-1.5 rounded-full"
+          style="background: var(--ui-input-bg); accent-color: var(--ui-accent);" />
+      </div>
+      <div>
         <div class="flex justify-between text-xs mb-0.5"><span>Context<InfoTooltip text="Max context length in tokens. Higher = more history but more VRAM."><span class="ml-0.5 w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip></span><span class="font-mono">{contextLength}</span></div>
         <input
           type="range"
@@ -448,24 +646,52 @@
     </div>
   </div>
 
-  <!-- 4. Context usage -->
+  <!-- 4. Context: delegated (slider) vs remaining capacity (complementary); then used in this chat -->
   <div>
     <div class="font-medium mb-1.5 text-xs flex items-center gap-1" style="color: var(--ui-text-primary);">
-      Context usage
-      <InfoTooltip text="Estimated tokens used in this chat vs. max context length. Start a new chat to reset.">
+      Context
+      <InfoTooltip text="Total capacity is fixed. Slider = how much you delegate to this chat. Remaining = capacity left in the pool. Used = how much of the delegated amount this chat has used.">
         <span class="w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[9px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span>
       </InfoTooltip>
     </div>
-    <div class="h-2 rounded-full overflow-hidden border" style="background: var(--ui-input-bg); border-color: var(--ui-border);">
-      <div
-        class="h-full rounded-full transition-all duration-300"
-        style="width: {contextPercent}%; background: var(--ui-accent);"
-        role="progressbar"
-        aria-valuenow={contextPercent}
-        aria-valuemin="0"
-        aria-valuemax="100"></div>
+    <div class="space-y-2">
+      <div>
+        <div class="flex justify-between text-[11px] mb-0.5"><span style="color: var(--ui-text-secondary);">Delegated to this chat</span><span class="font-mono">{contextLength}</span></div>
+        <div class="h-2 rounded-full overflow-hidden border" style="background: var(--ui-input-bg); border-color: var(--ui-border);">
+          <div
+            class="h-full rounded-full transition-all duration-300"
+            style="width: {contextLength > 0 ? Math.round((contextLength / CONTEXT_CAPACITY_MAX) * 100) : 0}%; background: var(--ui-accent);"
+            role="progressbar"
+            aria-valuenow={contextLength}
+            aria-valuemin="0"
+            aria-valuemax={CONTEXT_CAPACITY_MAX}></div>
+        </div>
+      </div>
+      <div>
+        <div class="flex justify-between text-[11px] mb-0.5"><span style="color: var(--ui-text-secondary);">Remaining capacity</span><span class="font-mono">{capacityRemaining}</span></div>
+        <div class="h-2 rounded-full overflow-hidden border" style="background: var(--ui-input-bg); border-color: var(--ui-border);">
+          <div
+            class="h-full rounded-full transition-all duration-300"
+            style="width: {capacityRemainingPercent}%; background: var(--atom-teal);"
+            role="progressbar"
+            aria-valuenow={capacityRemainingPercent}
+            aria-valuemin="0"
+            aria-valuemax="100"></div>
+        </div>
+      </div>
+      <div>
+        <div class="flex justify-between text-[11px] mb-0.5"><span style="color: var(--ui-text-secondary);">Used in this chat (est.)</span><span class="font-mono">{estimatedContextUsed}</span></div>
+        <div class="h-2 rounded-full overflow-hidden border" style="background: var(--ui-input-bg); border-color: var(--ui-border);">
+          <div
+            class="h-full rounded-full transition-all duration-300"
+            style="width: {contextPercent}%; background: var(--ui-accent);"
+            role="progressbar"
+            aria-valuenow={contextPercent}
+            aria-valuemin="0"
+            aria-valuemax="100"></div>
+        </div>
+      </div>
     </div>
-    <div class="mt-1 font-mono text-xs opacity-80">{estimatedContextUsed} / {contextLength} (est.)</div>
   </div>
 
   <!-- 5. Load settings -->
@@ -519,6 +745,32 @@
     {#if loadError}
       <p class="text-xs text-red-500 dark:text-red-400 mt-1">{loadError}</p>
     {/if}
+  </div>
+
+  <!-- 6. Export / Import / Presets -->
+  <div>
+    <div class="font-medium mb-1.5 text-xs" style="color: var(--ui-text-primary);">Profiles &amp; backup</div>
+    <div class="space-y-2">
+      <div class="flex gap-2">
+        <button type="button" class="flex-1 px-2 py-1.5 rounded border text-xs hover:opacity-90" style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);" onclick={exportSettings} title="Download settings as JSON">Export JSON</button>
+        <button type="button" class="flex-1 px-2 py-1.5 rounded border text-xs hover:opacity-90" style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);" onclick={triggerImport} title="Load settings from a JSON file">Import JSON</button>
+      </div>
+      <input type="file" accept=".json,application/json" class="hidden" bind:this={importInputEl} onchange={onImportFile} />
+      <div class="flex gap-1.5 items-center">
+        <input type="text" class="flex-1 px-1.5 py-1 rounded border text-xs min-w-0" style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);" placeholder="Preset name" bind:value={newPresetName} />
+        <button type="button" class="px-2 py-1 rounded border text-xs shrink-0 hover:opacity-90" style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);" onclick={saveAsPreset} disabled={!newPresetName.trim()} title="Save current settings as preset">Save preset</button>
+      </div>
+      {#if presetNames.length > 0}
+        <div class="flex gap-1.5 items-center">
+          <select class="flex-1 px-1.5 py-1 rounded border text-xs min-w-0" style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);" aria-label="Load preset" onchange={(e) => { const v = e.currentTarget?.value; if (v) loadPreset(v); e.currentTarget.value = ''; }}>
+            <option value="">Load preset…</option>
+            {#each presetNames as name}
+              <option value={name}>{name}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
+    </div>
   </div>
   </div>
 

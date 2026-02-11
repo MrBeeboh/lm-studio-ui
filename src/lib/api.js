@@ -274,6 +274,9 @@ export async function requestChatCompletion({ model, messages, options = {} }) {
       max_tokens: options.max_tokens ?? 1024,
       ...(options.top_p != null && { top_p: options.top_p }),
       ...(options.top_k != null && { top_k: options.top_k }),
+      ...(options.repeat_penalty != null && { repeat_penalty: options.repeat_penalty }),
+      ...(options.presence_penalty != null && { presence_penalty: options.presence_penalty }),
+      ...(options.frequency_penalty != null && { frequency_penalty: options.frequency_penalty }),
     }),
   });
   if (!res.ok) {
@@ -322,6 +325,8 @@ export async function streamChatCompletion({ model, messages, options = {}, onCh
         ...(options.top_p != null && { top_p: options.top_p }),
         ...(options.top_k != null && { top_k: options.top_k }),
         ...(options.repeat_penalty != null && { repeat_penalty: options.repeat_penalty }),
+        ...(options.presence_penalty != null && { presence_penalty: options.presence_penalty }),
+        ...(options.frequency_penalty != null && { frequency_penalty: options.frequency_penalty }),
         ...(options.stop?.length && { stop: options.stop }),
         ...(options.ttl != null && Number(options.ttl) > 0 && { ttl: Number(options.ttl) }),
       }),
