@@ -2,52 +2,16 @@
   import {
     settings,
     selectedModelId,
-    lastResponseTokPerSec,
-    lastResponseTokens,
     activeMessages,
     updateGlobalDefault,
     setPerModelOverride,
-    perModelOverrides,
-    globalDefault,
+    hardware,
     settingsOpen,
-    activeConversationId,
-    conversations,
   } from '$lib/stores.js';
-  import { getRecommendedSettingsForModel } from '$lib/modelDefaults.js';
-  import { createConversation, listConversations, getMessageCount } from '$lib/db.js';
+  import { BATCH_SIZE_MIN, BATCH_SIZE_MAX } from '$lib/modelDefaults.js';
   import { getModelIcon, getQuantization, modelIconOverrides } from '$lib/modelIcons.js';
-  import { unloadModel } from '$lib/api.js';
-
-  let responseHistory = $state([]);
-  const MAX_HISTORY = 5;
-  let lastPushedTps = $state(null);
-  let lastPushedTokens = $state(null);
-
-  let tpsVal = $state(null);
-  let tokensVal = $state(null);
-  $effect(() => {
-    const unsubT = lastResponseTokPerSec.subscribe((v) => (tpsVal = v));
-    const unsubN = lastResponseTokens.subscribe((v) => (tokensVal = v));
-    return () => {
-      unsubT();
-      unsubN();
-    };
-  });
-
-  $effect(() => {
-    const tps = tpsVal;
-    const tokens = tokensVal;
-    if (tps != null && tokens != null && Number(tps) > 0 && (tps !== lastPushedTps || tokens !== lastPushedTokens)) {
-      lastPushedTps = tps;
-      lastPushedTokens = tokens;
-      const elapsedMs = Math.round((Number(tokens) / Number(tps)) * 1000);
-      responseHistory = [
-        { tokens: Number(tokens), tps: Number(tps), elapsedMs },
-        ...responseHistory.slice(0, MAX_HISTORY - 1),
-      ];
-    }
-    return () => {};
-  });
+  import { loadModel } from '$lib/api.js';
+  import InfoTooltip from '$lib/components/InfoTooltip.svelte';
 
   let settingsVal = $state({});
   let contextLength = $state(4096);
@@ -63,10 +27,48 @@
     return () => unsubC();
   });
 
+  const DEFAULTS = {
+    context_length: 4096,
+    eval_batch_size: 512,
+    flash_attention: true,
+    offload_kv_cache_to_gpu: true,
+    gpu_offload: 'max',
+    cpu_threads: 4,
+    n_parallel: 4,
+    model_ttl_seconds: 0,
+  };
+  const GPU_OFFLOAD_OPTIONS = [
+    { value: 'max', label: 'Max' },
+    { value: '1', label: '100%' },
+    { value: '0.75', label: '75%' },
+    { value: '0.5', label: '50%' },
+    { value: '0.25', label: '25%' },
+    { value: 'off', label: 'Off' },
+  ];
+
+  let evalBatchSize = $state(DEFAULTS.eval_batch_size);
+  let flashAttention = $state(DEFAULTS.flash_attention);
+  let offloadKvToGpu = $state(DEFAULTS.offload_kv_cache_to_gpu);
+  let gpuOffload = $state(DEFAULTS.gpu_offload);
+  let cpuThreads = $state(DEFAULTS.cpu_threads);
+  let nParallel = $state(DEFAULTS.n_parallel);
+  let modelTtlSeconds = $state(DEFAULTS.model_ttl_seconds);
+  let loadError = $state(null);
+  let loadApplying = $state(false);
+
+  const maxCpuThreads = $derived(Math.max(1, $hardware?.cpuLogicalCores ?? 4));
+
   $effect(() => {
     const unsub = settings.subscribe((s) => {
       settingsVal = s ?? {};
       contextLength = s?.context_length ?? 4096;
+      evalBatchSize = s?.eval_batch_size ?? DEFAULTS.eval_batch_size;
+      flashAttention = s?.flash_attention ?? DEFAULTS.flash_attention;
+      offloadKvToGpu = s?.offload_kv_cache_to_gpu ?? DEFAULTS.offload_kv_cache_to_gpu;
+      gpuOffload = s?.gpu_offload ?? DEFAULTS.gpu_offload;
+      cpuThreads = s?.cpu_threads ?? DEFAULTS.cpu_threads;
+      nParallel = s?.n_parallel ?? DEFAULTS.n_parallel;
+      modelTtlSeconds = s?.model_ttl_seconds ?? DEFAULTS.model_ttl_seconds;
       temperature = s?.temperature ?? 0.7;
       topP = s?.top_p ?? 0.95;
       topK = s?.top_k ?? 64;
@@ -90,14 +92,6 @@
     contextLength > 0 ? Math.min(100, Math.round((estimatedContextUsed / contextLength) * 100)) : 0
   );
 
-  async function resetContext() {
-    const id = await createConversation();
-    let list = await listConversations();
-    list = await Promise.all(list.map(async (c) => ({ ...c, messageCount: await getMessageCount(c.id) })));
-    conversations.set(list);
-    activeConversationId.set(id);
-  }
-
   function onTempInput(e) {
     const v = parseFloat(e.target.value);
     if (Number.isFinite(v)) temperature = v;
@@ -110,109 +104,123 @@
     const v = parseInt(e.target.value, 10);
     if (Number.isFinite(v)) topK = v;
   }
-
-  function saveForThisModel() {
-    if (!currentModelId) return;
-    setPerModelOverride(currentModelId, { temperature, top_p: topP, top_k: topK, system_prompt: sysPrompt.trim() || undefined });
-  }
-  function saveAsGlobalDefault() {
-    updateGlobalDefault({ temperature, top_p: topP, top_k: topK, system_prompt: sysPrompt.trim() || undefined });
+  function onContextInput(e) {
+    const v = parseInt(e.target.value, 10);
+    if (Number.isFinite(v)) contextLength = Math.max(512, Math.min(131072, v));
   }
 
-  function resetToRecommended() {
-    if (!currentModelId) return;
-    perModelOverrides.update((by) => {
-      const next = { ...by };
-      delete next[currentModelId];
-      return next;
-    });
-    const rec = getRecommendedSettingsForModel(currentModelId);
-    temperature = rec.temperature ?? 0.7;
-    topP = rec.top_p ?? 0.95;
-    topK = rec.top_k ?? 64;
-    sysPrompt = rec.system_prompt ?? 'You are a helpful assistant.';
+  async function save() {
+    if (!currentModelId) {
+      loadError = 'Select a model first.';
+      return;
+    }
+    loadError = null;
+    loadApplying = true;
+    try {
+      const payload = {
+        temperature,
+        top_p: topP,
+        top_k: topK,
+        system_prompt: sysPrompt.trim() || undefined,
+        context_length: contextLength,
+        eval_batch_size: evalBatchSize,
+        flash_attention: flashAttention,
+        offload_kv_cache_to_gpu: offloadKvToGpu,
+        gpu_offload: gpuOffload,
+        cpu_threads: cpuThreads,
+        n_parallel: nParallel,
+        model_ttl_seconds: modelTtlSeconds,
+      };
+      setPerModelOverride(currentModelId, payload);
+      updateGlobalDefault(payload);
+      await loadModel(currentModelId, {
+        context_length: contextLength,
+        eval_batch_size: evalBatchSize,
+        flash_attention: flashAttention,
+        offload_kv_cache_to_gpu: offloadKvToGpu,
+        gpu_offload: gpuOffload,
+        cpu_threads: Math.min(maxCpuThreads, Math.max(1, cpuThreads)),
+        n_parallel: Math.min(32, Math.max(1, nParallel)),
+      });
+    } catch (e) {
+      loadError = e?.message || 'Failed. Is LM Studio running?';
+    } finally {
+      loadApplying = false;
+    }
   }
 
-  function resetGlobalToRecommended() {
-    globalDefault.set({});
+  function stepBatchDown() {
+    evalBatchSize = Math.max(BATCH_SIZE_MIN, Math.round(evalBatchSize / 2));
+  }
+  function stepBatchUp() {
+    evalBatchSize = Math.min(BATCH_SIZE_MAX, Math.round(evalBatchSize * 2));
   }
 
   function openSettings() {
     settingsOpen.set(true);
   }
 
-  let unloadBusy = $state(false);
-  async function unloadCurrent() {
-    if (!currentModelId || unloadBusy) return;
-    unloadBusy = true;
-    try {
-      await unloadModel(currentModelId);
-    } finally {
-      unloadBusy = false;
-    }
-  }
 </script>
 
 <div
-  class="intel-panel flex flex-col gap-4 overflow-y-auto p-3 text-sm h-full"
+  class="intel-panel flex flex-col h-full text-sm"
   style="color: var(--ui-text-secondary); background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);">
+  <div class="flex-1 overflow-y-auto p-3 pb-4 min-h-0 flex flex-col gap-4">
+  <!-- 1. System prompt -->
   <div>
-    <div class="font-medium mb-1.5 text-xs uppercase tracking-wide flex items-center justify-between gap-2">
-      <span style="color: var(--ui-text-primary);">Context</span>
-      <button
-        type="button"
-        class="text-[10px] px-2 py-1 rounded border shrink-0 hover:opacity-90"
-        style="border-color: var(--ui-border); color: var(--ui-text-secondary);"
-        onclick={resetContext}
-        title="Start a new chat to reset context usage">
-        Reset context
-      </button>
+    <div class="font-medium mb-1.5 text-xs flex items-center gap-1" style="color: var(--ui-text-primary);">
+      System prompt
+      <InfoTooltip text="Instructions that define the model's behavior. Sent at the start of each conversation.">
+        <span class="w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[9px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span>
+      </InfoTooltip>
     </div>
-    <div class="h-2 rounded-full overflow-hidden border" style="background: var(--ui-input-bg); border-color: var(--ui-border);">
-      <div
-        class="h-full rounded-full transition-all duration-300"
-        style="width: {contextPercent}%; background: var(--ui-accent);"
-        role="progressbar"
-        aria-valuenow={contextPercent}
-        aria-valuemin="0"
-        aria-valuemax="100"></div>
-    </div>
-    <div class="mt-1 font-mono text-[10px] opacity-80">{estimatedContextUsed} / {contextLength} (est.)</div>
+    <textarea
+      id="intel-sys-prompt"
+      class="w-full px-1.5 py-1 rounded border text-xs resize-y min-h-[72px]"
+      style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
+      placeholder="You are a helpful assistant."
+      bind:value={sysPrompt}
+      rows="3"></textarea>
   </div>
 
+  <!-- 2. Current model -->
   <div>
-    <div class="font-medium mb-1.5 text-xs uppercase tracking-wide" style="color: var(--ui-text-primary);">Current model</div>
+    <div class="font-medium mb-1.5 text-xs flex items-center gap-1" style="color: var(--ui-text-primary);">
+      Model
+      <InfoTooltip text="The LLM selected in the header. Click Settings to change LM Studio URL or other app settings.">
+        <span class="w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[9px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span>
+      </InfoTooltip>
+    </div>
     <div class="rounded-lg border p-2 flex items-center gap-2" style="border-color: var(--ui-border); background: var(--ui-input-bg);">
       {#if currentModelId}
         <img src={getModelIcon(currentModelId, $modelIconOverrides)} alt="" class="w-6 h-6 shrink-0 rounded object-contain" />
         <span class="truncate flex-1 text-xs font-medium min-w-0" style="color: var(--ui-text-primary);">{currentModelId}</span>
         {#if getQuantization(currentModelId)}
-          <span class="text-[10px] px-1.5 py-0.5 rounded font-mono opacity-80" style="background: var(--ui-border);">{getQuantization(currentModelId)}</span>
+          <span class="text-xs px-1.5 py-0.5 rounded font-mono opacity-80" style="background: var(--ui-border);">{getQuantization(currentModelId)}</span>
         {/if}
       {:else}
-        <span class="text-xs opacity-70">Select model in header</span>
+        <span class="text-xs opacity-70">Select in header</span>
       {/if}
       <button
         type="button"
-        class="shrink-0 text-[10px] px-2 py-1 rounded border hover:opacity-90 disabled:opacity-50"
-        style="border-color: var(--ui-border); color: var(--ui-text-primary);"
-        onclick={unloadCurrent}
-        disabled={unloadBusy || !currentModelId}
-        title="Unload model from memory to free VRAM">{unloadBusy ? '…' : 'Unload'}</button>
-      <button
-        type="button"
-        class="shrink-0 text-[10px] px-2 py-1 rounded border hover:opacity-90"
+        class="shrink-0 text-xs px-2 py-1 rounded border hover:opacity-90"
         style="border-color: var(--ui-border); color: var(--ui-text-primary);"
         onclick={openSettings}
         title="Open settings">Settings</button>
     </div>
   </div>
 
+  <!-- 3. Inference parameters -->
   <div>
-    <div class="font-medium mb-1.5 text-xs uppercase tracking-wide" style="color: var(--ui-text-primary);">Parameters</div>
+    <div class="font-medium mb-1.5 text-xs flex items-center gap-1" style="color: var(--ui-text-primary);">
+      Parameters
+      <InfoTooltip text="Sampling parameters for generation. Higher temperature = more random; lower = more deterministic.">
+        <span class="w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[9px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span>
+      </InfoTooltip>
+    </div>
     <div class="space-y-3">
       <div>
-        <div class="flex justify-between text-[10px] mb-0.5"><span>Temperature</span><span class="font-mono">{temperature}</span></div>
+        <div class="flex justify-between text-xs mb-0.5"><span>Temperature<InfoTooltip text="Randomness of output. 0 = deterministic, 2 = very creative."><span class="ml-0.5 w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip></span><span class="font-mono">{temperature}</span></div>
         <input
           type="range"
           min="0"
@@ -224,7 +232,7 @@
           style="background: var(--ui-input-bg); accent-color: var(--ui-accent);" />
       </div>
       <div>
-        <div class="flex justify-between text-[10px] mb-0.5"><span>Top-P</span><span class="font-mono">{topP}</span></div>
+        <div class="flex justify-between text-xs mb-0.5"><span>Top-P<InfoTooltip text="Nucleus sampling: only consider tokens whose cumulative probability is below this. 1 = no cutoff."><span class="ml-0.5 w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip></span><span class="font-mono">{topP}</span></div>
         <input
           type="range"
           min="0"
@@ -236,7 +244,7 @@
           style="background: var(--ui-input-bg); accent-color: var(--ui-accent);" />
       </div>
       <div>
-        <div class="flex justify-between text-[10px] mb-0.5"><span>Top-K</span><span class="font-mono">{topK}</span></div>
+        <div class="flex justify-between text-xs mb-0.5"><span>Top-K<InfoTooltip text="Limit sampling to the top K most likely tokens. Higher = more variety."><span class="ml-0.5 w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip></span><span class="font-mono">{topK}</span></div>
         <input
           type="range"
           min="1"
@@ -248,65 +256,104 @@
           style="background: var(--ui-input-bg); accent-color: var(--ui-accent);" />
       </div>
       <div>
-        <label class="block text-[10px] mb-0.5" for="intel-sys-prompt">System prompt</label>
-        <textarea
-          id="intel-sys-prompt"
-          class="w-full px-1.5 py-1 rounded border text-xs resize-y min-h-[60px]"
-          style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
-          placeholder="You are a helpful assistant."
-          bind:value={sysPrompt}
-          rows="2"></textarea>
+        <div class="flex justify-between text-xs mb-0.5"><span>Context<InfoTooltip text="Max context length in tokens. Higher = more history but more VRAM."><span class="ml-0.5 w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip></span><span class="font-mono">{contextLength}</span></div>
+        <input
+          type="range"
+          min="512"
+          max="131072"
+          step="1024"
+          value={contextLength}
+          oninput={onContextInput}
+          class="w-full h-1.5 rounded-full"
+          style="background: var(--ui-input-bg); accent-color: var(--ui-accent);" />
       </div>
-    </div>
-    <div class="mt-2 flex flex-wrap gap-1.5">
-      <button
-        type="button"
-        class="text-[10px] px-2 py-1 rounded border hover:opacity-90 disabled:opacity-50"
-        style="border-color: var(--ui-border); color: var(--ui-text-primary);"
-        onclick={saveForThisModel}
-        disabled={!currentModelId}
-        title="Save parameters and system prompt for this model only">Save for this model</button>
-      <button
-        type="button"
-        class="text-[10px] px-2 py-1 rounded border hover:opacity-90"
-        style="border-color: var(--ui-border); color: var(--ui-text-primary);"
-        onclick={saveAsGlobalDefault}
-        title="Save as default for all models that don't have a custom setting">Save as global default</button>
-      <button
-        type="button"
-        class="text-[10px] px-2 py-1 rounded border hover:opacity-90 disabled:opacity-50"
-        style="border-color: var(--ui-border); color: var(--ui-text-secondary);"
-        onclick={resetToRecommended}
-        disabled={!currentModelId}
-        title="Clear custom settings for this model and use recommended">Reset to recommended</button>
     </div>
   </div>
 
+  <!-- 4. Context usage -->
   <div>
-    <div class="font-medium mb-1.5 text-xs uppercase tracking-wide" style="color: var(--ui-text-primary);">Response log</div>
-    <div class="rounded border overflow-hidden font-mono text-[10px]" style="border-color: var(--ui-border); background: var(--ui-input-bg);">
-      {#if responseHistory.length === 0}
-        <div class="p-2 opacity-60">No completions yet</div>
-      {:else}
-        <table class="w-full">
-          <thead>
-            <tr class="border-b" style="border-color: var(--ui-border);">
-              <th class="text-left p-1.5">t/s</th>
-              <th class="text-left p-1.5">tokens</th>
-              <th class="text-left p-1.5">ms</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each responseHistory as row}
-              <tr class="border-b border-zinc-200/50 dark:border-zinc-600/50" style="border-color: var(--ui-border);">
-                <td class="p-1.5" style="color: var(--ui-accent);">{row.tps.toFixed(1)}</td>
-                <td class="p-1.5">{row.tokens}</td>
-                <td class="p-1.5">{row.elapsedMs}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      {/if}
+    <div class="font-medium mb-1.5 text-xs flex items-center gap-1" style="color: var(--ui-text-primary);">
+      Context usage
+      <InfoTooltip text="Estimated tokens used in this chat vs. max context length. Start a new chat to reset.">
+        <span class="w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[9px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span>
+      </InfoTooltip>
     </div>
+    <div class="h-2 rounded-full overflow-hidden border" style="background: var(--ui-input-bg); border-color: var(--ui-border);">
+      <div
+        class="h-full rounded-full transition-all duration-300"
+        style="width: {contextPercent}%; background: var(--ui-accent);"
+        role="progressbar"
+        aria-valuenow={contextPercent}
+        aria-valuemin="0"
+        aria-valuemax="100"></div>
+    </div>
+    <div class="mt-1 font-mono text-xs opacity-80">{estimatedContextUsed} / {contextLength} (est.)</div>
+  </div>
+
+  <!-- 5. Load settings -->
+  <div>
+    <div class="font-medium mb-1.5 text-xs flex items-center gap-1" style="color: var(--ui-text-primary);">
+      Load
+      <InfoTooltip text="Settings applied when the model loads. Save button loads the model with these.">
+        <span class="w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[9px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span>
+      </InfoTooltip>
+    </div>
+    <div class="space-y-2">
+      <div class="flex items-center gap-2">
+        <label for="intel-batch" class="text-xs shrink-0 w-20 flex items-center gap-0.5">Batch<InfoTooltip text="Eval batch size. Larger = faster inference but more VRAM."><span class="w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip></label>
+        <div class="flex flex-1 gap-0.5">
+          <button type="button" class="px-1.5 py-0.5 rounded-l border text-xs hover:opacity-90" style="border-color: var(--ui-border);" onclick={stepBatchDown} title="Half">▼</button>
+          <input id="intel-batch" type="number" min={BATCH_SIZE_MIN} max={BATCH_SIZE_MAX} bind:value={evalBatchSize} class="flex-1 px-1.5 py-1 border text-xs min-w-0" style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);" />
+          <button type="button" class="px-1.5 py-0.5 rounded-r border text-xs hover:opacity-90" style="border-color: var(--ui-border);" onclick={stepBatchUp} title="Double">▲</button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <label for="intel-gpu-offload" class="text-xs shrink-0 w-20 flex items-center gap-0.5">GPU<InfoTooltip text="How much of the model to run on GPU. Max = all layers; Off = CPU only."><span class="w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip></label>
+        <select id="intel-gpu-offload" bind:value={gpuOffload} class="flex-1 px-1.5 py-1 rounded border text-xs min-w-0" style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);">
+          {#each GPU_OFFLOAD_OPTIONS as opt}
+            <option value={opt.value}>{opt.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <label for="intel-ttl" class="text-xs shrink-0 w-20 flex items-center gap-0.5">TTL (s)<InfoTooltip text="Idle timeout in seconds. 0 = disabled. With LM Studio JIT, unloads model when idle to free VRAM."><span class="w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip></label>
+        <input id="intel-ttl" type="number" min="0" step="60" bind:value={modelTtlSeconds} class="flex-1 px-1.5 py-1 rounded border text-xs min-w-0" style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);" />
+      </div>
+      <div class="flex items-center gap-2">
+        <label for="intel-cpu-threads" class="text-xs shrink-0 w-20 flex items-center gap-0.5">CPU thr<InfoTooltip text="CPU threads for inference when layers run on CPU. Use up to logical cores for best throughput."><span class="w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip></label>
+        <input id="intel-cpu-threads" type="number" min="1" max={maxCpuThreads} bind:value={cpuThreads} class="flex-1 px-1.5 py-1 rounded border text-xs min-w-0" style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);" />
+      </div>
+      <div class="flex items-center gap-2">
+        <label for="intel-n-parallel" class="text-xs shrink-0 w-20 flex items-center gap-0.5">Parallel<InfoTooltip text="Max concurrent predictions (n_parallel). Higher = better Arena throughput; no extra VRAM with unified KV."><span class="w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip></label>
+        <input id="intel-n-parallel" type="number" min="1" max="32" bind:value={nParallel} class="flex-1 px-1.5 py-1 rounded border text-xs min-w-0" style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);" />
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-1.5 cursor-pointer text-xs">
+          <input type="checkbox" bind:checked={flashAttention} class="rounded accent-themed" />
+          Flash attn<InfoTooltip text="Flash Attention: faster and more memory-efficient attention. Usually enable for best speed."><span class="w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip>
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer text-xs">
+          <input type="checkbox" bind:checked={offloadKvToGpu} class="rounded accent-themed" />
+          KV→GPU<InfoTooltip text="Offload KV cache to GPU. Frees CPU RAM; uses more VRAM."><span class="w-3 h-3 rounded-full border inline-flex items-center justify-center text-[8px] cursor-help opacity-60 hover:opacity-100" style="border-color: var(--ui-border);">i</span></InfoTooltip>
+        </label>
+      </div>
+    </div>
+    {#if loadError}
+      <p class="text-xs text-red-500 dark:text-red-400 mt-1">{loadError}</p>
+    {/if}
+  </div>
+  </div>
+
+  <!-- Sticky Save footer -->
+  <div class="shrink-0 p-3 pt-2 border-t" style="border-color: var(--ui-border); background-color: var(--ui-bg-sidebar);">
+    <button
+      type="button"
+      class="w-full py-2 px-4 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+      style="background-color: var(--ui-accent); color: white;"
+      onclick={save}
+      disabled={loadApplying || !currentModelId}
+      title="Save all settings for this model and load it with LM Studio">
+      {loadApplying ? 'Saving…' : 'Save'}
+    </button>
   </div>
 </div>

@@ -1,75 +1,26 @@
 <script>
   import { fly } from 'svelte/transition';
   import { backOut, quintOut } from 'svelte/easing';
-  import { layout, globalDefault, updateGlobalDefault, selectedModelId, hardware, models, presetDefaultModels, lmStudioBaseUrl, voiceServerUrl } from '$lib/stores.js';
-  import { loadModel, unloadModel } from '$lib/api.js';
-  import { getDefaultsForModel, BATCH_SIZE_MIN, BATCH_SIZE_MAX } from '$lib/modelDefaults.js';
+  import { globalDefault, updateGlobalDefault, selectedModelId, models, presetDefaultModels, lmStudioBaseUrl, voiceServerUrl } from '$lib/stores.js';
 
   let { onclose } = $props();
 
   const DEFAULTS = {
-    temperature: 0.7,
-    max_tokens: 4096,
-    system_prompt: 'You are a helpful assistant.',
-    top_p: 0.95,
-    top_k: 64,
-    repeat_penalty: 1.15,
-    stop: [],
-    model_ttl_seconds: 0,
     audio_enabled: true,
     audio_clicks: true,
     audio_volume: 0.25,
-    context_length: 4096,
-    eval_batch_size: 512,
-    flash_attention: true,
-    offload_kv_cache_to_gpu: true,
-    gpu_offload: 'max',
-    cpu_threads: 4,
-    n_parallel: 4,
   };
 
-  const GPU_OFFLOAD_OPTIONS = [
-    { value: 'max', label: 'Max (recommended)' },
-    { value: '1', label: '100%' },
-    { value: '0.75', label: '75%' },
-    { value: '0.5', label: '50%' },
-    { value: '0.25', label: '25%' },
-    { value: 'off', label: 'Off (CPU only)' },
-  ];
-
-  let modelTtlSeconds = $state(DEFAULTS.model_ttl_seconds);
   let audioEnabled = $state(DEFAULTS.audio_enabled);
   let audioClicks = $state(DEFAULTS.audio_clicks);
   let audioVolume = $state(DEFAULTS.audio_volume);
-  let contextLength = $state(DEFAULTS.context_length);
-  let evalBatchSize = $state(DEFAULTS.eval_batch_size);
-  let flashAttention = $state(DEFAULTS.flash_attention);
-  let offloadKvToGpu = $state(DEFAULTS.offload_kv_cache_to_gpu);
-  let gpuOffload = $state(DEFAULTS.gpu_offload);
-  let cpuThreads = $state(DEFAULTS.cpu_threads);
-  let nParallel = $state(DEFAULTS.n_parallel);
 
   $effect(() => {
     const g = $globalDefault;
-    $layout;
-    modelTtlSeconds = g.model_ttl_seconds ?? DEFAULTS.model_ttl_seconds;
     audioEnabled = g.audio_enabled ?? DEFAULTS.audio_enabled;
     audioClicks = g.audio_clicks ?? DEFAULTS.audio_clicks;
     audioVolume = g.audio_volume ?? DEFAULTS.audio_volume;
-    contextLength = g.context_length ?? DEFAULTS.context_length;
-    evalBatchSize = g.eval_batch_size ?? DEFAULTS.eval_batch_size;
-    flashAttention = g.flash_attention ?? DEFAULTS.flash_attention;
-    offloadKvToGpu = g.offload_kv_cache_to_gpu ?? DEFAULTS.offload_kv_cache_to_gpu;
-    gpuOffload = g.gpu_offload ?? DEFAULTS.gpu_offload;
-    cpuThreads = g.cpu_threads ?? DEFAULTS.cpu_threads;
-    nParallel = g.n_parallel ?? DEFAULTS.n_parallel;
   });
-
-  const maxCpuThreads = $derived(Math.max(1, $hardware?.cpuLogicalCores ?? 4));
-
-  let loadSectionOpen = $state(true);
-  let loadError = $state(null);
-  let loadApplying = $state(false);
 
   const PRESETS = [
     { name: 'General', prompt: 'You are a helpful assistant.' },
@@ -89,92 +40,19 @@
     if (modelId) selectedModelId.set(modelId);
   }
 
-  function stepBatchDown() {
-    evalBatchSize = Math.max(BATCH_SIZE_MIN, Math.round(evalBatchSize / 2));
-  }
-  function stepBatchUp() {
-    evalBatchSize = Math.min(BATCH_SIZE_MAX, Math.round(evalBatchSize * 2));
-  }
-
-  async function applyLoadToModel() {
-    if (!$selectedModelId) {
-      loadError = 'No model selected. Select a model first.';
-      return;
-    }
-    loadError = null;
-    loadApplying = true;
-    try {
-      await loadModel($selectedModelId, {
-        context_length: contextLength,
-        eval_batch_size: evalBatchSize,
-        flash_attention: flashAttention,
-        offload_kv_cache_to_gpu: offloadKvToGpu,
-        gpu_offload: gpuOffload,
-        cpu_threads: Math.min(maxCpuThreads, Math.max(1, cpuThreads)),
-        n_parallel: Math.min(32, Math.max(1, nParallel)),
-      });
-      updateGlobalDefault({
-        context_length: contextLength,
-        eval_batch_size: evalBatchSize,
-        flash_attention: flashAttention,
-        offload_kv_cache_to_gpu: offloadKvToGpu,
-        gpu_offload: gpuOffload,
-        cpu_threads: cpuThreads,
-        n_parallel: nParallel,
-      });
-    } catch (e) {
-      loadError = e?.message || 'Failed to apply load settings. Is LM Studio running?';
-    } finally {
-      loadApplying = false;
-    }
-  }
-
   function save() {
     updateGlobalDefault({
-      model_ttl_seconds: Math.max(0, Number(modelTtlSeconds) || 0),
       audio_enabled: !!audioEnabled,
       audio_clicks: !!audioClicks,
       audio_volume: Math.max(0, Math.min(1, Number(audioVolume) || 0)),
-      context_length: contextLength,
-      eval_batch_size: evalBatchSize,
-      flash_attention: flashAttention,
-      offload_kv_cache_to_gpu: offloadKvToGpu,
-      gpu_offload: gpuOffload,
-      cpu_threads: Math.min(maxCpuThreads, Math.max(1, cpuThreads)),
-      n_parallel: nParallel,
     });
     onclose?.();
   }
 
   function resetToDefaults() {
-    const modelId = $selectedModelId;
-    const hw = $hardware;
-    const d = modelId ? getDefaultsForModel(modelId, hw) : DEFAULTS;
-    modelTtlSeconds = d.model_ttl_seconds ?? DEFAULTS.model_ttl_seconds;
-    audioEnabled = d.audio_enabled ?? DEFAULTS.audio_enabled;
-    audioClicks = d.audio_clicks ?? DEFAULTS.audio_clicks;
-    audioVolume = d.audio_volume ?? DEFAULTS.audio_volume;
-    contextLength = d.context_length ?? DEFAULTS.context_length;
-    evalBatchSize = d.eval_batch_size ?? DEFAULTS.eval_batch_size;
-    flashAttention = d.flash_attention ?? DEFAULTS.flash_attention;
-    offloadKvToGpu = d.offload_kv_cache_to_gpu ?? DEFAULTS.offload_kv_cache_to_gpu;
-    gpuOffload = d.gpu_offload ?? DEFAULTS.gpu_offload;
-    cpuThreads = Math.min(maxCpuThreads, d.cpu_threads ?? maxCpuThreads);
-    nParallel = d.n_parallel ?? DEFAULTS.n_parallel;
-  }
-
-  let unloadApplying = $state(false);
-  async function unloadCurrentModel() {
-    if (!$selectedModelId) return;
-    unloadApplying = true;
-    loadError = null;
-    try {
-      await unloadModel($selectedModelId);
-    } catch (e) {
-      loadError = e?.message || 'Failed to unload. Is LM Studio running?';
-    } finally {
-      unloadApplying = false;
-    }
+    audioEnabled = DEFAULTS.audio_enabled;
+    audioClicks = DEFAULTS.audio_clicks;
+    audioVolume = DEFAULTS.audio_volume;
   }
 </script>
 
@@ -190,7 +68,7 @@
     <div class="shrink-0 px-6 pt-5 pb-2 border-b border-zinc-200 dark:border-zinc-700 flex items-start justify-between gap-2">
       <div>
         <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Settings</h2>
-        <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">LM Studio, Voice, Load settings, and Audio. For generation params (temperature, system prompt, etc.) use the <strong>Intel panel</strong> (right).</p>
+        <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">LM Studio, Voice, and Audio. Model and load settings are in the <strong>Intel panel</strong> (right).</p>
       </div>
       <button type="button" class="shrink-0 p-1.5 rounded text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 dark:hover:text-zinc-200 text-xl leading-none" onclick={() => onclose?.()} title="Close" aria-label="Close">✕</button>
     </div>
@@ -227,127 +105,6 @@
             class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm font-mono placeholder:text-zinc-400" />
           <p class="text-xs text-zinc-500 dark:text-zinc-400">Run the Python voice server from the <code class="bg-zinc-200 dark:bg-zinc-700 px-1 rounded">voice-server</code> folder (see <code class="bg-zinc-200 dark:bg-zinc-700 px-1 rounded">voice-server/README.md</code>). Leave default to use mic with local server at port 8765.</p>
         </div>
-      </div>
-
-      <!-- Load settings (batch size, context – applied when loading model) -->
-      <div class="border border-zinc-200 dark:border-zinc-600 rounded-lg overflow-hidden">
-        <button
-          type="button"
-          class="w-full flex items-center gap-2 px-4 py-2.5 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors"
-          onclick={() => (loadSectionOpen = !loadSectionOpen)}>
-          <span class="text-zinc-500">📦</span>
-          Load settings
-          <span class="ml-auto text-zinc-400">{loadSectionOpen ? '▼' : '▶'}</span>
-        </button>
-        {#if loadSectionOpen}
-          <div class="px-4 pb-4 pt-1 space-y-4 border-t border-zinc-200 dark:border-zinc-600">
-            <p class="text-xs text-zinc-500 dark:text-zinc-400">Applied when you click “Apply to model”. Affects speed and memory.</p>
-            <div>
-              <label for="settings-context-length" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-1">Context length</label>
-              <input
-                id="settings-context-length"
-                type="number"
-                min="512"
-                max="131072"
-                step="256"
-                bind:value={contextLength}
-                class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm" />
-            </div>
-            <div>
-              <label for="settings-batch-size" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-1">Batch size</label>
-              <div class="flex items-stretch gap-1">
-                <input
-                  id="settings-batch-size"
-                  type="number"
-                  min={BATCH_SIZE_MIN}
-                  max={BATCH_SIZE_MAX}
-                  bind:value={evalBatchSize}
-                  onfocus={(e) => e.target instanceof HTMLInputElement && e.target.select()}
-                  class="batch-size-step-input flex-1 rounded-l border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm min-w-0" />
-                <div class="flex flex-col border border-l-0 border-zinc-300 dark:border-zinc-600 rounded-r overflow-hidden">
-                  <button type="button" class="flex-1 px-2 py-0.5 border-b border-zinc-300 dark:border-zinc-600 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-300 text-xs font-medium transition-colors" onclick={stepBatchUp} title="Double" aria-label="Double batch size">▲</button>
-                  <button type="button" class="flex-1 px-2 py-0.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-300 text-xs font-medium transition-colors" onclick={stepBatchDown} title="Half" aria-label="Halve batch size">▼</button>
-                </div>
-              </div>
-              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Type a number or use ▲/▼ to double or half ({BATCH_SIZE_MIN} – {BATCH_SIZE_MAX})</p>
-            </div>
-            <div>
-              <label for="settings-gpu-offload" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-1">GPU offload</label>
-              <select
-                id="settings-gpu-offload"
-                bind:value={gpuOffload}
-                class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm">
-                {#each GPU_OFFLOAD_OPTIONS as opt}
-                  <option value={opt.value}>{opt.label}</option>
-                {/each}
-              </select>
-              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">How much of the model to run on GPU (LM Studio –gpu).</p>
-            </div>
-            <div>
-              <label for="settings-model-ttl" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-1">Idle TTL (seconds)</label>
-              <input
-                id="settings-model-ttl"
-                type="number"
-                min="0"
-                step="60"
-                bind:value={modelTtlSeconds}
-                class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm" />
-              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">0 disables. Works with LM Studio JIT + Auto‑Evict to free VRAM when idle.</p>
-            </div>
-            <div>
-              <label for="settings-cpu-threads" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-1">CPU threads</label>
-              <input
-                id="settings-cpu-threads"
-                type="number"
-                min="1"
-                max={maxCpuThreads}
-                bind:value={cpuThreads}
-                class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm" />
-              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">System: {maxCpuThreads} logical cores. Use up to this for best throughput.</p>
-            </div>
-            <div>
-              <label for="settings-n-parallel" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-1">Parallel slots (n_parallel)</label>
-              <input
-                id="settings-n-parallel"
-                type="number"
-                min="1"
-                max="32"
-                bind:value={nParallel}
-                class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm" />
-              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Max concurrent predictions (0.4+). Default 4. Higher = better Arena throughput; no extra VRAM with unified KV.</p>
-            </div>
-            <div class="flex items-center gap-4">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" bind:checked={flashAttention} class="rounded border-zinc-300 dark:border-zinc-600 accent-themed" />
-                <span class="text-sm text-zinc-700 dark:text-zinc-300">Flash attention</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" bind:checked={offloadKvToGpu} class="rounded border-zinc-300 dark:border-zinc-600 accent-themed" />
-                <span class="text-sm text-zinc-700 dark:text-zinc-300">Offload KV cache to GPU</span>
-              </label>
-            </div>
-            {#if loadError}
-              <p class="text-sm text-red-600 dark:text-red-400">{loadError}</p>
-            {/if}
-            <div class="flex gap-2">
-              <button
-                type="button"
-                class="flex-1 px-4 py-2 rounded-lg bg-zinc-800 dark:bg-zinc-600 text-white hover:bg-zinc-700 dark:hover:bg-zinc-500 disabled:opacity-50 text-sm font-medium"
-                onclick={applyLoadToModel}
-                disabled={loadApplying || !$selectedModelId}>
-                {loadApplying ? 'Applying…' : 'Apply to model'}
-              </button>
-              <button
-                type="button"
-                class="flex-1 px-4 py-2 rounded-lg border border-zinc-400 dark:border-zinc-500 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-50 text-sm font-medium"
-                onclick={unloadCurrentModel}
-                disabled={unloadApplying || !$selectedModelId}
-                title="Unload model from memory to free VRAM">
-                {unloadApplying ? 'Unloading…' : 'Unload'}
-              </button>
-            </div>
-          </div>
-        {/if}
       </div>
 
       <!-- Audio feedback -->

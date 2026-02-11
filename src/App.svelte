@@ -148,12 +148,11 @@
           <ThemeToggle />
         </div>
         <div class="flex-1 min-w-4 shrink" aria-hidden="true"></div>
-        <div class="flex items-center shrink-0" style="{HEADER_GROUP_GAP} {HEADER_RIGHT_GROUP}" role="group" aria-label="Status and settings">
+        <div class="flex items-center shrink-0" style="{HEADER_GROUP_GAP} {HEADER_RIGHT_GROUP}" role="group" aria-label="Status">
           <span class="flex items-center gap-1.5 shrink-0 text-xs" style="color: var(--ui-text-secondary);" title={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking...'} aria-label={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking connection'}>
             <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? '#ef4444' : '#94a3b8'};" aria-hidden="true"></span>
             <span class="hidden sm:inline">LM Studio</span>
           </span>
-          <button type="button" class="flex items-center gap-1.5 px-3 py-2 rounded-lg shrink-0 min-h-[44px] text-base transition-colors hover:opacity-90" style="color: var(--ui-text-secondary); background: color-mix(in srgb, var(--ui-border) 30%, transparent);" onclick={() => settingsOpen.set(true)} aria-label="Settings" title="Settings"><span class="text-lg leading-none" aria-hidden="true">⚙</span><span class="text-xs font-medium hidden sm:inline">Settings</span></button>
         </div>
       </header>
       <div class="flex flex-1 min-h-0 min-w-0 relative">
@@ -178,7 +177,7 @@
             >
               <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7" /></svg>
             </button>
-            <div class="flex-1 overflow-hidden flex flex-col min-h-0">
+            <div class="flex-1 overflow-hidden flex flex-col min-h-0 pl-6">
               <IntelPanel />
             </div>
           </aside>
@@ -227,12 +226,11 @@
           <ThemeToggle />
         </div>
         <div class="flex-1 min-w-4 shrink" aria-hidden="true"></div>
-        <div class="flex items-center shrink-0" style="{HEADER_GROUP_GAP} {HEADER_RIGHT_GROUP}" role="group" aria-label="Status and settings">
+        <div class="flex items-center shrink-0" style="{HEADER_GROUP_GAP} {HEADER_RIGHT_GROUP}" role="group" aria-label="Status">
           <span class="flex items-center gap-1.5 shrink-0 text-xs" style="color: var(--ui-text-secondary);" title={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking...'} aria-label={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking connection'}>
             <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? '#ef4444' : '#94a3b8'};" aria-hidden="true"></span>
             <span class="hidden sm:inline">LM Studio</span>
           </span>
-          <button type="button" class="flex items-center gap-1.5 px-3 py-2 rounded-lg shrink-0 min-h-[44px] text-base transition-colors hover:opacity-90" style="color: var(--ui-text-secondary); background: color-mix(in srgb, var(--ui-border) 30%, transparent);" onclick={() => settingsOpen.set(true)} aria-label="Settings" title="Settings"><span class="text-lg leading-none" aria-hidden="true">⚙</span><span class="text-xs font-medium hidden sm:inline">Settings</span></button>
         </div>
       </header>
       <div class="flex flex-1 min-h-0 relative">
