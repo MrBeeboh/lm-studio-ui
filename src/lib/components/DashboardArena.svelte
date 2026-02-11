@@ -1,7 +1,8 @@
 <script>
   /**
    * DashboardArena (ATOM Arena): head-to-head model comparison with optional judge scoring.
-   * Layout: header (model cards A–D) → question bar (Q selector, Ask, Web, Judgment, Reset, Settings) → response panels (resizable) → footer (ChatInput).
+   * Layout: header (model cards A–D) → question bar (Q selector, Ask, Next, Web globe, Judgment, Reset, Settings) → response panels (resizable) → footer (ChatInput).
+   * Bottom-left floating panel: full question text (no truncation) + "Ask the Judge" interactive side-conversation.
    * Right slide-out: Arena settings (Questions, Answer key, Contest rules, Execution, Web search, Actions).
    * Judge: slot A can be "Use as judge" (checkbox in panel A header); Judgment button runs A to score B/C/D and updates arenaScores.
    */
@@ -106,8 +107,11 @@
 
   /** Accordion open state in settings panel. */
   let settingsRulesExpanded = $state(false);
-  /** Judge feedback: collapsible panel bottom-left; default collapsed. */
-  let arenaJudgeFeedbackExpanded = $state(false);
+  /** Ask the Judge: collapsible panel bottom-left; default collapsed. */
+  let askJudgeExpanded = $state(false);
+  let askJudgeQuestion = $state('');
+  let askJudgeReply = $state('');
+  let askJudgeLoading = $state(false);
   let runId = 0;
   let lastSampleAt = 0;
   let lastSampleTokens = 0;
@@ -128,6 +132,71 @@
     { main: 'Judge is hitting the books.', sub: '(The books are web servers. Same energy.)' },
     { main: 'Judge is checking the web…', sub: '(Making sure the models didn’t just make it up. Again.)' },
   ];
+
+  // ---------- Draggable floating panels (question + Ask the Judge) ----------
+  function loadPanelPos(key, defaultX, defaultY) {
+    if (typeof localStorage === 'undefined') return { x: defaultX, y: defaultY };
+    try {
+      const s = localStorage.getItem(key);
+      if (!s) return { x: defaultX, y: defaultY };
+      const { x, y } = JSON.parse(s);
+      if (typeof x === 'number' && typeof y === 'number') return { x, y };
+    } catch (_) {}
+    return { x: defaultX, y: defaultY };
+  }
+  let questionPanelPos = $state(loadPanelPos('arenaQuestionPanelPos', 16, 400));
+  let askJudgePanelPos = $state(loadPanelPos('arenaAskJudgePanelPos', 16, 300));
+
+  /**
+   * Svelte action: make the panel draggable by its handle. Handle must be a direct child of the panel.
+   * Updates getPos/setPos and persists to localStorage on drag end; clamps to viewport.
+   */
+  function makeDraggable(handleEl, params) {
+    if (!params || !handleEl) return;
+    const { storageKey, getPos, setPos } = params;
+    const panelEl = handleEl.parentElement;
+    if (!panelEl) return;
+
+    function move(e) {
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      setPos({ x: startLeft + dx, y: startTop + dy });
+    }
+    function up() {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      const pos = getPos();
+      const rect = panelEl.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const x = Math.max(0, Math.min(vw - rect.width, pos.x));
+      const y = Math.max(0, Math.min(vh - rect.height, pos.y));
+      setPos({ x, y });
+      if (typeof localStorage !== 'undefined') localStorage.setItem(storageKey, JSON.stringify({ x, y }));
+    }
+    let startX, startY, startLeft, startTop;
+    function down(e) {
+      if (e.button !== 0) return;
+      if (e.target && e.target.closest && e.target.closest('button')) return;
+      e.preventDefault();
+      startX = e.clientX;
+      startY = e.clientY;
+      const p = getPos();
+      startLeft = p.x;
+      startTop = p.y;
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    }
+    handleEl.addEventListener('pointerdown', down);
+    return {
+      destroy() {
+        handleEl.removeEventListener('pointerdown', down);
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+      },
+    };
+  }
+
   /** Eject-all in progress; message after (success or error). */
   let ejectBusy = $state(false);
   let ejectMessage = $state(/** @type {null | string} */ (null));
@@ -711,8 +780,13 @@
         webSearchInProgress.set(false);
       }
     }
+    const answerKeyTrimmed = typeof answerKey === 'string' ? answerKey.trim() : '';
     const parts = [
       'You are a judge. Score each model response 1-10 (10 = best) with one short reason (right or wrong).',
+      '',
+      answerKeyTrimmed
+        ? 'BASIS FOR SCORING: An ANSWER KEY is provided below. Base your scores on it. Compare each model\'s response to the answer key; scores must reflect how well each response matches or deviates from the answer key.'
+        : 'BASIS FOR SCORING: No answer key was provided. Use the WEB SEARCH section below (if present) to fact-check, or use your own knowledge to evaluate correctness.',
       '',
       'RULES: Your entire reply must be ONLY these lines—nothing else. No reasoning, no preamble, no <think>, no revisiting or comparing. Start directly with the first Model line.',
       '',
@@ -722,12 +796,11 @@
       'If a response is missing: Model X: 0/10 - No response.',
       '',
     ];
-    if (judgeWebContext) {
-      parts.push('--- WEB SEARCH (use to fact-check) ---', judgeWebContext, '');
-    }
-    const answerKeyTrimmed = typeof answerKey === 'string' ? answerKey.trim() : '';
     if (answerKeyTrimmed) {
-      parts.push('--- ANSWER KEY ---', answerKeyTrimmed, '', 'Use this to evaluate accuracy of responses.', '');
+      parts.push('--- ANSWER KEY (base your scoring on this) ---', answerKeyTrimmed, '');
+    }
+    if (judgeWebContext) {
+      parts.push('--- WEB SEARCH (use to fact-check when no answer key, or to supplement) ---', judgeWebContext, '');
     }
     parts.push('--- ORIGINAL PROMPT ---', promptText || '(none)', '');
     for (const { slot, msgs } of slotsWithResponses) {
@@ -829,6 +902,93 @@
      ($arenaPanelCount >= 3 && messagesC.length > 0) ||
      ($arenaPanelCount >= 4 && messagesD.length > 0))
   );
+
+  // ---------- Ask the Judge (side conversation) ----------
+  async function askTheJudge() {
+    if (askJudgeLoading || !askJudgeQuestion.trim()) return;
+    const judgeId = get(dashboardModelA);
+    if (!judgeId) {
+      chatError.set('Select a model in Slot A to use as judge.');
+      return;
+    }
+    askJudgeLoading = true;
+    askJudgeReply = '';
+    chatError.set(null);
+
+    // Build context: original question, model responses, judge's scoring
+    const n = get(arenaPanelCount);
+    const slotsWithResponses = [
+      n >= 2 && messagesB.length ? { slot: 'B', msgs: messagesB } : null,
+      n >= 3 && messagesC.length ? { slot: 'C', msgs: messagesC } : null,
+      n >= 4 && messagesD.length ? { slot: 'D', msgs: messagesD } : null,
+    ].filter(Boolean);
+
+    const lastUserMsg = slotsWithResponses.length
+      ? slotsWithResponses[0].msgs.filter((m) => m.role === 'user').pop()
+      : null;
+    const promptText = lastUserMsg ? contentToText(lastUserMsg.content) : '';
+
+    const contextParts = [
+      'You are a judge in a model arena competition. You were given an answer key and contest rules (see below) to use when scoring. The user may ask you about your scoring, the answer key, or how you use it. Answer thoughtfully and concisely; do NOT re-score.',
+      '',
+    ];
+    // Answer key (Arena settings → Answer Key) — same as in Judgment run
+    const answerKeyTrimmed = typeof answerKey === 'string' ? answerKey.trim() : '';
+    if (answerKeyTrimmed) {
+      contextParts.push('--- ANSWER KEY (use this to evaluate accuracy; it was provided to you when you scored) ---', answerKeyTrimmed, '');
+    } else {
+      contextParts.push('--- ANSWER KEY ---', '(None provided for this competition.)', '');
+    }
+    // Contest rules (Arena settings)
+    const rulesTrimmed = typeof contestRules === 'string' ? contestRules.trim() : '';
+    if (rulesTrimmed) {
+      contextParts.push('--- CONTEST RULES ---', rulesTrimmed, '');
+    }
+    contextParts.push('--- ORIGINAL PROMPT ---', promptText || '(none)', '');
+    for (const { slot, msgs } of slotsWithResponses) {
+      const lastAssistant = [...msgs].reverse().find((m) => m.role === 'assistant');
+      const text = lastAssistant ? contentToText(lastAssistant.content) : '';
+      contextParts.push(`--- MODEL ${slot} RESPONSE ---`, text.trim() || '(no response)', '');
+    }
+    // Include judge's last scoring if available
+    const lastJudgeMsg = [...messagesA].reverse().find((m) => m.role === 'assistant');
+    if (lastJudgeMsg) {
+      contextParts.push('--- YOUR PREVIOUS SCORING ---', contentToText(lastJudgeMsg.content).trim(), '');
+    }
+    contextParts.push('--- USER QUESTION ---', askJudgeQuestion.trim());
+
+    const systemContent = answerKeyTrimmed
+      ? 'You are a competition judge. You have been given the answer key and (if any) contest rules in the user message. Use them when answering questions about your scoring. Do NOT re-score — just explain your reasoning.'
+      : 'You are a competition judge. Answer the user\'s question about your scoring thoughtfully and concisely. Do NOT re-score — just explain your reasoning.';
+
+    const messages = [
+      { role: 'system', content: systemContent },
+      { role: 'user', content: contextParts.join('\n') },
+    ];
+
+    const controller = new AbortController();
+    try {
+      await streamChatCompletion({
+        model: judgeId,
+        messages,
+        options: {
+          temperature: $settings.temperature,
+          max_tokens: $settings.max_tokens,
+          top_p: $settings.top_p,
+        },
+        signal: controller.signal,
+        onChunk(chunk) {
+          askJudgeReply += chunk;
+        },
+      });
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        askJudgeReply = `Error: ${err?.message || 'Request failed.'}`;
+      }
+    } finally {
+      askJudgeLoading = false;
+    }
+  }
 
   function lastTps(msgs) {
     const last = [...(msgs || [])].reverse().find((m) => m.role === 'assistant' && m.stats);
@@ -1002,15 +1162,8 @@
   <div
     class="arena-question-bar shrink-0 flex items-center gap-4 h-10 px-4 border-b"
     style="background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);">
-    <!-- Question (flex, truncates); when none, show placeholder -->
-    <div class="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
-      {#if currentQuestionTotal > 0 && currentQuestionText}
-        <span class="text-xs font-semibold shrink-0" style="color: var(--ui-accent);">Q{currentQuestionNum}:</span>
-        <span class="text-sm truncate" style="color: var(--ui-text-primary);" title={currentQuestionText}>{currentQuestionText}</span>
-      {:else}
-        <span class="text-xs" style="color: var(--ui-text-secondary);">No question selected</span>
-      {/if}
-    </div>
+    <!-- Left spacer to balance right side -->
+    <div class="flex-1 min-w-4"></div>
     <!-- Group 1: Question navigation -->
     <div class="flex items-center h-8 rounded-md overflow-hidden border" style="border-color: var(--ui-border); background: var(--ui-input-bg);">
       <button type="button" class="h-full px-2.5 text-xs font-medium disabled:opacity-40 transition-opacity" style="color: var(--ui-text-secondary);" disabled={currentQuestionTotal === 0 || currentQuestionNum <= 1} onclick={prevQuestion} aria-label="Previous question">←</button>
@@ -1408,34 +1561,81 @@
     </section>
   </div>
 
-  <!-- Judge feedback: collapsible bottom-left -->
+  <!-- Draggable floating panel: current question (only when questions loaded) -->
+  {#if currentQuestionTotal > 0 && currentQuestionText}
+    <div
+      class="arena-floating-panel rounded-lg border shadow-sm overflow-hidden"
+      style="position: fixed; left: {questionPanelPos.x}px; top: {questionPanelPos.y}px; z-index: 30; max-width: min(360px, calc(100vw - 2rem)); background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);">
+      <div
+        class="arena-floating-handle flex items-center gap-2 px-3 py-2 cursor-grab active:cursor-grabbing select-none"
+        style="border-bottom: 1px solid var(--ui-border); color: var(--ui-text-secondary);"
+        use:makeDraggable={{
+          storageKey: 'arenaQuestionPanelPos',
+          getPos: () => questionPanelPos,
+          setPos: (p) => questionPanelPos = p
+        }}
+      >
+        <span class="text-xs font-bold tabular-nums" style="color: var(--ui-accent);">Q{currentQuestionNum}</span>
+        <span class="text-[10px] opacity-80">Drag to move</span>
+      </div>
+      <div class="px-3 py-2.5">
+        <p class="text-sm leading-relaxed" style="color: var(--ui-text-primary);">{currentQuestionText}</p>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Draggable floating panel: Ask the Judge (only when slot A is judge) -->
   {#if $arenaSlotAIsJudge}
-    <div class="fixed bottom-20 left-4 z-30 flex flex-col items-start gap-1" style="max-width: min(360px, calc(100vw - 2rem));">
-      {#if arenaJudgeFeedbackExpanded}
-        <div class="rounded-lg border shadow-lg overflow-hidden transition-all duration-300" style="background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);">
-          <div class="flex items-center justify-between px-3 py-2 border-b" style="border-color: var(--ui-border);">
-            <span class="text-xs font-medium" style="color: var(--ui-text-primary);">Feedback to judge (optional)</span>
-            <button type="button" class="p-1 rounded opacity-70 hover:opacity-100" style="color: var(--ui-text-secondary);" onclick={() => arenaJudgeFeedbackExpanded = false} aria-label="Collapse">×</button>
+    <div
+      class="arena-floating-panel rounded-lg border shadow-lg overflow-hidden"
+      style="position: fixed; left: {askJudgePanelPos.x}px; top: {askJudgePanelPos.y}px; z-index: 30; width: min(380px, calc(100vw - 2rem)); background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);">
+      <div
+        class="arena-floating-handle flex items-center justify-between gap-2 px-3 py-2 cursor-grab active:cursor-grabbing select-none"
+        style="border-bottom: 1px solid var(--ui-border); color: var(--ui-text-primary);"
+        use:makeDraggable={{
+          storageKey: 'arenaAskJudgePanelPos',
+          getPos: () => askJudgePanelPos,
+          setPos: (p) => askJudgePanelPos = p
+        }}
+      >
+        <span class="text-xs font-semibold">🧑‍⚖️ Ask the Judge</span>
+        {#if askJudgeExpanded}
+          <button type="button" class="p-1 rounded opacity-70 hover:opacity-100" style="color: var(--ui-text-secondary);" onclick={() => askJudgeExpanded = false} aria-label="Collapse">×</button>
+        {:else}
+          <button type="button" class="text-xs font-medium px-2 py-1 rounded" style="background: var(--ui-accent); color: var(--ui-bg-main);" onclick={() => askJudgeExpanded = true} aria-label="Expand">Open</button>
+        {/if}
+      </div>
+      {#if askJudgeExpanded}
+        {#if askJudgeReply}
+          <div class="px-3 py-2 text-xs leading-relaxed border-b max-h-48 overflow-y-auto" style="background-color: var(--ui-input-bg); border-color: var(--ui-border); color: var(--ui-text-primary); white-space: pre-wrap;">
+            {askJudgeReply}
           </div>
+        {/if}
+        <div class="flex gap-1.5 p-2">
           <textarea
-            id="arena-judge-feedback"
-            class="w-full px-3 py-2 text-xs resize-y min-h-20 max-h-32"
-            style="background-color: var(--ui-input-bg); color: var(--ui-text-primary); border: none;"
-            placeholder="Paste correction for the judge. Then run Judgment."
-            rows="3"
-            bind:value={judgeFeedback}
+            id="arena-ask-judge"
+            class="flex-1 px-2.5 py-2 text-xs resize-none rounded-md"
+            style="background-color: var(--ui-input-bg); color: var(--ui-text-primary); border: 1px solid var(--ui-border);"
+            placeholder="e.g. Why did you give Model B a 6 instead of a 4?"
+            rows="2"
+            bind:value={askJudgeQuestion}
+            onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askTheJudge(); } }}
           ></textarea>
+          <button
+            type="button"
+            class="self-end shrink-0 h-8 px-3 rounded-md text-xs font-semibold transition-opacity disabled:opacity-40"
+            style="background-color: var(--ui-accent); color: var(--ui-bg-main);"
+            disabled={askJudgeLoading || !askJudgeQuestion.trim()}
+            onclick={askTheJudge}
+          >
+            {#if askJudgeLoading}
+              Thinking…
+            {:else}
+              Ask
+            {/if}
+          </button>
         </div>
       {/if}
-      <button
-        type="button"
-        class="px-3 py-2 rounded-lg text-xs font-medium border shadow transition-colors"
-        style="background-color: var(--ui-bg-sidebar); border-color: var(--ui-border); color: var(--ui-text-primary);"
-        onclick={() => arenaJudgeFeedbackExpanded = !arenaJudgeFeedbackExpanded}
-        aria-expanded={arenaJudgeFeedbackExpanded}
-        aria-label="Judge feedback">
-        💬 Judge Feedback
-      </button>
     </div>
   {/if}
 
