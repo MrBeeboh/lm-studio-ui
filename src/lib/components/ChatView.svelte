@@ -1,8 +1,10 @@
 <script>
   import { onMount } from 'svelte';
-  import { activeConversationId, activeMessages, conversations, settings, effectiveModelId, isStreaming, chatError, pendingDroppedFiles } from '$lib/stores.js';
+  import { get } from 'svelte/store';
+  import { activeConversationId, activeMessages, conversations, settings, effectiveModelId, isStreaming, chatError, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress } from '$lib/stores.js';
   import { getMessages, addMessage, clearMessages, deleteMessage, getMessageCount } from '$lib/db.js';
   import { sendMessage } from '$lib/api/lmstudio.js';
+  import { searchDuckDuckGo, formatSearchResultForChat } from '$lib/duckduckgo.js';
   import MessageList from '$lib/components/MessageList.svelte';
   import ChatInput from '$lib/components/ChatInput.svelte';
   import { generateId, resizeImageDataUrlsForVision, shouldSkipImageResizeForVision } from '$lib/utils.js';
@@ -43,6 +45,22 @@
       return;
     }
 
+    let effectiveText = (text || '').trim();
+    if (get(webSearchForNextMessage) && hasText) {
+      webSearchForNextMessage.set(false);
+      webSearchInProgress.set(true);
+      try {
+        const searchResult = await searchDuckDuckGo(effectiveText);
+        const formatted = formatSearchResultForChat(effectiveText, searchResult);
+        effectiveText = formatted + '\n\n---\nUser question: ' + effectiveText;
+      } catch (e) {
+        chatError.set(e?.message || 'Web search failed. Try again or send without internet.');
+        webSearchInProgress.set(false);
+        return;
+      }
+      webSearchInProgress.set(false);
+    }
+
     // Vision: skip resize for Qwen-VL 4B/8B; otherwise resize when payload > 1 MB
     const skipResize = shouldSkipImageResizeForVision($effectiveModelId);
     const urlsForApi = hasImages
@@ -50,13 +68,13 @@
       : [];
     const userContent = hasImages
       ? [
-          ...(hasText ? [{ type: 'text', text: text.trim() }] : [{ type: 'text', text: ' ' }]),
+          ...(effectiveText ? [{ type: 'text', text: effectiveText }] : [{ type: 'text', text: ' ' }]),
           ...urlsForApi.map((url) => ({
             type: 'image_url',
             image_url: { url, ...(skipResize ? {} : { detail: 'low' }) },
           })),
         ]
-      : text.trim();
+      : effectiveText;
     await addMessage(convId, { role: 'user', content: userContent });
     await loadMessages();
 
@@ -167,7 +185,7 @@
     {:else}
       <!-- After first message: messages above, input fixed at bottom -->
       <div class="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-zinc-200/60 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/30">
-        <div class="max-w-3xl mx-auto w-full flex flex-wrap items-center gap-2">
+        <div class="max-w-[min(960px,92%)] mx-auto w-full flex flex-wrap items-center gap-2">
           <button type="button" class="text-xs px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 transition-colors" onclick={clearChat} title="Clear all messages">Clear</button>
         </div>
       </div>
@@ -175,7 +193,7 @@
         <MessageList />
       </div>
       <div class="shrink-0 border-t border-zinc-200/60 dark:border-zinc-800/80 p-4" style="background-color: var(--ui-bg-main);">
-        <div class="max-w-3xl mx-auto">
+        <div class="max-w-[min(960px,92%)] mx-auto w-full">
           {#if $chatError}
             <div class="mb-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm flex items-center justify-between gap-2">
               <span>{$chatError}</span>

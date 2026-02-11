@@ -14,7 +14,8 @@
   const PREVIEW = {
     atom:             { bg: '#0c0c0c', accent: '#00d4aa', text: '#f5f5f5' },
     default:          { bg: '#fafafa', accent: '#B22234', text: '#18181b' },
-    cyberpunk:        { bg: '#0a0e27', accent: '#00ff9f', text: '#e6e6e6' },
+    newsprint:        { bg: '#f4f1ea', accent: '#8b2500', text: '#1c1917' },
+    dailyedition:     { bg: '#f2efe6', accent: '#8b6914', text: '#1a1a1a' },
     neural:           { bg: '#0b0c10', accent: '#66fcf1', text: '#c5c6c7' },
     quantum:          { bg: '#0d0221', accent: '#f72585', text: '#f0f0f0' },
     arctic:           { bg: '#f8fafc', accent: '#f97316', text: '#0f172a' },

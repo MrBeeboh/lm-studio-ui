@@ -1,8 +1,9 @@
 <script>
   import { get } from 'svelte/store';
-  import { chatError, dashboardModelA, dashboardModelB, dashboardModelC, dashboardModelD, isStreaming, settings, liveTokens, pushTokSample, liveTokPerSec, arenaPanelCount, arenaSlotAIsJudge, arenaSlotOverrides, setArenaSlotOverride, pendingDroppedFiles } from '$lib/stores.js';
+  import { chatError, dashboardModelA, dashboardModelB, dashboardModelC, dashboardModelD, isStreaming, settings, liveTokens, pushTokSample, liveTokPerSec, arenaPanelCount, arenaSlotAIsJudge, arenaSlotOverrides, setArenaSlotOverride, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress } from '$lib/stores.js';
   import { playClick, playComplete } from '$lib/audio.js';
   import { streamChatCompletion } from '$lib/api.js';
+  import { searchDuckDuckGo, formatSearchResultForChat } from '$lib/duckduckgo.js';
   import ChatInput from '$lib/components/ChatInput.svelte';
   import MessageBubble from '$lib/components/MessageBubble.svelte';
   import { generateId, resizeImageDataUrlsForVision, shouldSkipImageResizeForVision } from '$lib/utils.js';
@@ -206,6 +207,22 @@
     if (!text.trim() || $isStreaming) return;
     chatError.set(null);
 
+    let effectiveText = text.trim();
+    if (get(webSearchForNextMessage)) {
+      webSearchForNextMessage.set(false);
+      webSearchInProgress.set(true);
+      try {
+        const searchResult = await searchDuckDuckGo(effectiveText);
+        const formatted = formatSearchResultForChat(effectiveText, searchResult);
+        effectiveText = formatted + '\n\n---\nUser question: ' + effectiveText;
+      } catch (e) {
+        chatError.set(e?.message || 'Web search failed. Try again or send without internet.');
+        webSearchInProgress.set(false);
+        return;
+      }
+      webSearchInProgress.set(false);
+    }
+
     const n = get(arenaPanelCount);
     const slotsActive = ['A', ...(n >= 2 ? ['B'] : []), ...(n >= 3 ? ['C'] : []), ...(n >= 4 ? ['D'] : [])];
     const isJudge = get(arenaSlotAIsJudge);
@@ -226,13 +243,13 @@
     const urlsForApi = imageDataUrls.length ? (needResize ? await resizeImageDataUrlsForVision(imageDataUrls) : imageDataUrls) : [];
     const content = urlsForApi.length
       ? [
-          { type: 'text', text: text.trim() },
+          { type: 'text', text: effectiveText },
           ...urlsForApi.map((url) => ({
             type: 'image_url',
             image_url: { url, ...(needResize ? { detail: 'low' } : {}) },
           })),
         ]
-      : text.trim();
+      : effectiveText;
 
     runId += 1;
     const currentRun = runId;

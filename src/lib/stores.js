@@ -72,10 +72,17 @@ export const cockpitIntelOpen = writable(true);
 export const pinnedContent = writable(null);
 
 
-/** Color scheme: default (red) | cyberpunk | neural | quantum */
-export const uiTheme = writable(
-  (typeof localStorage !== 'undefined' && localStorage.getItem('uiTheme')) || 'default'
-);
+/** Color scheme: default (red) | newsprint | neural | quantum | ... (see themeOptions.js) */
+function getInitialUiTheme() {
+  if (typeof localStorage === 'undefined') return 'default';
+  const raw = localStorage.getItem('uiTheme') || 'default';
+  if (raw === 'cyberpunk') {
+    localStorage.setItem('uiTheme', 'default');
+    return 'default';
+  }
+  return raw;
+}
+export const uiTheme = writable(getInitialUiTheme());
 
 /** LM Studio server base URL (e.g. http://localhost:1234 or http://10.0.0.51:1234). Empty = use default. */
 const getStoredLmStudioUrl = () => (typeof localStorage !== 'undefined' ? localStorage.getItem('lmStudioBaseUrl') : null) || '';

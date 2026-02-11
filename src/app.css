@@ -325,32 +325,91 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   --ui-glow: rgba(224, 60, 81, 0.3);
 }
 
-/* Option 1: Cyberpunk Terminal */
-[data-ui-theme="cyberpunk"] {
-  --ui-bg-main: #0a0e27;
-  --ui-bg-sidebar: #0d1117;
-  --ui-accent: #00ff9f;
-  --ui-accent-hot: #ff2e97;
-  --ui-text-primary: #e6e6e6;
-  --ui-text-secondary: #7d8590;
-  --ui-border: #1f2937;
-  --ui-sidebar-active: #0a0e27;
-  --ui-sidebar-hover: #1f2937;
-  --ui-input-bg: #0d1117;
-  --ui-input-border: #1f2937;
-  --ui-glow: rgba(0, 255, 159, 0.3);
-  --atom-accent: #00ff9f;
-  --atom-accent-light: #00ff9f;
-  --atom-teal: #00ff9f;
-  --atom-amber: #ff2e97;
+/* Newsprint (Editorial) – warm paper, dark ink, masthead accent */
+[data-ui-theme="newsprint"] {
+  --ui-bg-main: #f4f1ea;
+  --ui-bg-sidebar: #ebe6dc;
+  --ui-accent: #8b2500;
+  --ui-accent-hot: #b33a0a;
+  --ui-accent-cool: #5c4033;
+  --ui-text-primary: #1c1917;
+  --ui-text-secondary: #57534e;
+  --ui-border: #b8a99a;
+  --ui-sidebar-active: #e8e2d8;
+  --ui-sidebar-hover: #e0d9cc;
+  --ui-input-bg: #fefdfb;
+  --ui-input-border: #b8a99a;
+  --ui-glow: rgba(139, 37, 0, 0.15);
+  --atom-accent: #8b2500;
+  --atom-accent-light: #a03008;
+  --atom-teal: #5c4033;
+  --atom-amber: #b45309;
 }
-[data-ui-theme="cyberpunk"] body {
-  background: linear-gradient(135deg, #0a0e27 0%, #0d0221 100%);
-  background-size: 200% 200%;
-  animation: ui-gradient-shift 15s ease infinite;
+[data-ui-theme="newsprint"] body {
+  background: #f4f1ea;
+  font-family: 'Georgia', 'Times New Roman', Times, serif;
 }
 
-/* Option 2: Neural Network Blue */
+/* Daily Edition (Front Page) – Grok-style newspaper: masthead strip, column feel, gold accent */
+[data-ui-theme="dailyedition"] {
+  --ui-bg-main: #f2efe6;
+  --ui-bg-sidebar: #e8e4d9;
+  --ui-accent: #1a1a1a;
+  --ui-accent-hot: #8b6914;
+  --ui-accent-cool: #5c4a2a;
+  --ui-text-primary: #1a1a1a;
+  --ui-text-secondary: #4a4540;
+  --ui-border: #a89f8f;
+  --ui-sidebar-active: #ddd8cc;
+  --ui-sidebar-hover: #d4cfc2;
+  --ui-input-bg: #fcfbf7;
+  --ui-input-border: #a89f8f;
+  --ui-glow: rgba(139, 105, 20, 0.12);
+  --atom-accent: #8b6914;
+  --atom-accent-light: #a67c1a;
+  --atom-teal: #5c4a2a;
+  --atom-amber: #8b6914;
+}
+[data-ui-theme="dailyedition"] body {
+  background: #f2efe6;
+  font-family: 'Georgia', 'Times New Roman', Times, serif;
+}
+/* Masthead-style strip below header (newspaper “below the fold” rule) */
+[data-ui-theme="dailyedition"] header {
+  position: relative;
+  border-bottom: 2px solid var(--ui-border);
+}
+[data-ui-theme="dailyedition"] header::after {
+  content: '';
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 4px;
+  background: linear-gradient(90deg, var(--ui-accent) 0%, var(--ui-accent) 20%, transparent 20%, transparent 80%, var(--ui-accent) 80%);
+  opacity: 0.4;
+}
+/* Main chat area: subtle column-rule (vertical line like newspaper columns) */
+[data-ui-theme="dailyedition"] main {
+  border-left: 1px solid var(--ui-border);
+  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.04);
+}
+/* Right panel: “sidebar column” look (slightly darker paper) */
+[data-ui-theme="dailyedition"] aside {
+  background-color: #e8e4d9 !important;
+  border-left: 2px solid var(--ui-border);
+}
+/* Send / primary buttons: muted gold (newspaper ad accent) */
+[data-ui-theme="dailyedition"] .send-button:not([style*="background: var(--ui-accent-hot)"]) {
+  background: #8b6914 !important;
+  color: #fcfbf7 !important;
+}
+[data-ui-theme="dailyedition"] .send-button:hover:not(:disabled):not([style*="background: var(--ui-accent-hot)"]) {
+  background: #a67c1a !important;
+}
+
+/* Neural Network Blue */
 [data-ui-theme="neural"] {
   --ui-bg-main: #0b0c10;
   --ui-bg-sidebar: #1f2833;

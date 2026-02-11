@@ -1,6 +1,6 @@
 <script>
   import { get } from 'svelte/store';
-  import { isStreaming, voiceServerUrl, pendingDroppedFiles } from '$lib/stores.js';
+  import { isStreaming, voiceServerUrl, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress } from '$lib/stores.js';
   import { pdfToImageDataUrls } from '$lib/pdfToImages.js';
 
   let { onSend, onStop, placeholder: placeholderOverride = undefined } = $props();
@@ -295,6 +295,18 @@
       <span class="mic-icon" aria-hidden="true">🎤</span>
     {/if}
   </button>
+  <button
+    type="button"
+    class="web-search-button"
+    class:active={$webSearchForNextMessage}
+    title={$webSearchForNextMessage ? 'Web search on for next message (click to turn off)' : 'Search the web for next message'}
+    disabled={$isStreaming}
+    onclick={() => webSearchForNextMessage.update((v) => !v)}
+    aria-label={$webSearchForNextMessage ? 'Web search on' : 'Search web for next message'}
+    aria-pressed={$webSearchForNextMessage}
+  >
+    <span class="web-search-icon" aria-hidden="true" title="Internet">🌐</span>
+  </button>
   <div class="chat-input-main">
     {#if attachments.length > 0}
       <div class="attachments-row">
@@ -328,10 +340,12 @@
   {:else}
     <button
       onclick={handleSubmit}
-      disabled={($isStreaming || (!text.trim() && attachments.length === 0)) ? true : null}
+      disabled={($isStreaming || $webSearchInProgress || (!text.trim() && attachments.length === 0)) ? true : null}
       class="send-button"
     >
-      {#if $isStreaming}
+      {#if $webSearchInProgress}
+        <span class="inline-flex items-center gap-1.5"><span aria-hidden="true">🌐</span> Searching…</span>
+      {:else if $isStreaming}
         <span class="inline-flex items-center gap-1.5"><svg class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Sending...</span>
       {:else}
         Send
@@ -494,6 +508,36 @@
   .attach-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+  .web-search-button {
+    flex-shrink: 0;
+    width: 44px;
+    min-height: 44px;
+    border-radius: 8px;
+    border: 2px solid var(--ui-border, #e5e7eb);
+    background: var(--ui-input-bg, #fff);
+    color: var(--ui-text-primary, #111);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .web-search-button:hover:not(:disabled) {
+    border-color: var(--ui-accent, #3b82f6);
+    background: color-mix(in srgb, var(--ui-accent, #3b82f6) 10%, transparent);
+  }
+  .web-search-button.active {
+    border-color: var(--ui-accent, #3b82f6);
+    background: color-mix(in srgb, var(--ui-accent, #3b82f6) 14%, transparent);
+  }
+  .web-search-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .web-search-icon {
+    font-size: 1.25rem;
+    line-height: 1;
   }
   .chat-input-main {
     flex: 1;

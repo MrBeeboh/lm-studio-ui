@@ -6,7 +6,8 @@
 export const UI_THEME_OPTIONS = [
   { value: 'atom', label: 'ATOM (Clinical)' },
   { value: 'default', label: 'Default (red)' },
-  { value: 'cyberpunk', label: 'Cyberpunk Terminal' },
+  { value: 'newsprint', label: 'Newsprint (Editorial)' },
+  { value: 'dailyedition', label: 'Daily Edition (Front Page)' },
   { value: 'neural', label: 'Neural Network Blue' },
   { value: 'quantum', label: 'Quantum Purple' },
   { value: 'arctic', label: 'Arctic Command' },

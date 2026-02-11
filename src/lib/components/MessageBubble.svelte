@@ -26,7 +26,7 @@
   class="flex {isUser ? 'justify-end' : 'justify-start'}"
   in:fly={{ y: 56, duration: 1200, easing: bounceOut }}>
   <div
-    class="max-w-[82%] rounded-2xl px-4 py-3 shadow-sm
+    class="max-w-full rounded-2xl px-4 py-3 shadow-sm
       {isUser
       ? 'ui-user-bubble'
       : 'bg-white dark:bg-zinc-800/90 text-zinc-900 dark:text-zinc-100 border border-zinc-200/80 dark:border-zinc-700/80'}">

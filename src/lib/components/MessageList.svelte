@@ -17,7 +17,7 @@
   $: msgs, scrollToBottom();
 </script>
 
-<div class="max-w-3xl mx-auto py-4 px-3" bind:this={listEl}>
+<div class="max-w-[min(960px,92%)] mx-auto py-4 px-3 w-full" bind:this={listEl}>
   <div class="space-y-4">
     {#each msgs as msg (msg.id)}
       <div class="message-entrance">
