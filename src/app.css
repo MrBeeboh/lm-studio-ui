@@ -1111,6 +1111,16 @@ body {
 .arena-globe-dot-pulse { animation: arena-globe-dot-pulse 1.2s ease-in-out infinite; }
 @keyframes arena-globe-dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
+/* Arena control bar: sections + dividers */
+.arena-bar-section { padding: 0 0.25rem; }
+.arena-bar-divider {
+  width: 1px;
+  height: 1.25rem;
+  flex-shrink: 0;
+  background-color: var(--ui-border);
+  opacity: 0.8;
+}
+
 /* Arena question panel: resize handles (edge/corner) */
 .arena-resize-handle:hover { background-color: color-mix(in srgb, var(--ui-accent) 30%, transparent) !important; }
 

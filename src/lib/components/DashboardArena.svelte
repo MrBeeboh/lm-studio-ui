@@ -1237,45 +1237,48 @@
     {/if}
   </header>
 
-  <!-- === Question bar: Q selector, Ask, Web (None/All/Judge only), Judgment, Reset scores, Settings === -->
+  <!-- === Arena control bar: Question | Run | Web | Judge | Tools === -->
   <div
-    class="arena-question-bar shrink-0 flex items-center gap-4 h-10 px-4 border-b"
+    class="arena-question-bar shrink-0 flex items-center gap-0 px-4 py-2.5 border-b"
     style="background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);">
-    <!-- Left spacer to balance right side -->
-    <div class="flex-1 min-w-4"></div>
-    <!-- Group 1: Question navigation -->
-    <div class="flex items-center h-8 rounded-md overflow-hidden border" style="border-color: var(--ui-border); background: var(--ui-input-bg);">
-      <button type="button" class="h-full px-2.5 text-xs font-medium disabled:opacity-40 transition-opacity" style="color: var(--ui-text-secondary);" disabled={currentQuestionTotal === 0 || currentQuestionNum <= 1} onclick={prevQuestion} aria-label="Previous question">←</button>
-      {#if currentQuestionTotal > 0}
-        <select
-          class="h-full min-w-[4.5rem] pl-2 pr-7 text-xs font-semibold tabular-nums border-l border-r bg-transparent cursor-pointer"
-          style="border-color: var(--ui-border); color: var(--ui-text-primary);"
-          aria-label="Current question"
-          value={currentQuestionNum}
-          onchange={(e) => jumpToQuestion(e.currentTarget.value)}>
-          {#each Array(currentQuestionTotal) as _, i}
-            <option value={i + 1}>Q{i + 1}</option>
-          {/each}
-        </select>
-        <span class="h-full flex items-center px-2 text-xs tabular-nums" style="color: var(--ui-text-secondary);">/ {currentQuestionTotal}</span>
-      {:else}
-        <span class="px-2 text-xs" style="color: var(--ui-text-secondary);">—</span>
-      {/if}
-      <button type="button" class="h-full px-2.5 text-xs font-medium disabled:opacity-40 transition-opacity" style="color: var(--ui-text-secondary);" disabled={currentQuestionTotal === 0 || currentQuestionNum >= currentQuestionTotal} onclick={advanceQuestionIndex} aria-label="Next question">→</button>
+    <!-- 1. Question: nav only -->
+    <div class="arena-bar-section flex items-center gap-1" aria-label="Question">
+      <div class="flex items-center h-8 rounded-md overflow-hidden border" style="border-color: var(--ui-border); background: var(--ui-input-bg);">
+        <button type="button" class="h-full px-2.5 text-xs font-medium disabled:opacity-40 transition-opacity" style="color: var(--ui-text-secondary);" disabled={currentQuestionTotal === 0 || currentQuestionNum <= 1} onclick={prevQuestion} aria-label="Previous question">←</button>
+        {#if currentQuestionTotal > 0}
+          <select
+            class="h-full min-w-[4.5rem] pl-2 pr-7 text-xs font-semibold tabular-nums border-l border-r bg-transparent cursor-pointer"
+            style="border-color: var(--ui-border); color: var(--ui-text-primary);"
+            aria-label="Current question"
+            value={currentQuestionNum}
+            onchange={(e) => jumpToQuestion(e.currentTarget.value)}>
+            {#each Array(currentQuestionTotal) as _, i}
+              <option value={i + 1}>Q{i + 1}</option>
+            {/each}
+          </select>
+          <span class="h-full flex items-center px-2 text-xs tabular-nums" style="color: var(--ui-text-secondary);">/ {currentQuestionTotal}</span>
+        {:else}
+          <span class="px-2 text-xs" style="color: var(--ui-text-secondary);">—</span>
+        {/if}
+        <button type="button" class="h-full px-2.5 text-xs font-medium disabled:opacity-40 transition-opacity" style="color: var(--ui-text-secondary);" disabled={currentQuestionTotal === 0 || currentQuestionNum >= currentQuestionTotal} onclick={advanceQuestionIndex} aria-label="Next question">→</button>
+      </div>
     </div>
-    <!-- Group 2: Primary actions (Ask = send current; Next = advance + send) -->
-    <button type="button" class="arena-bar-btn primary h-8 px-4 rounded-md text-xs font-semibold shrink-0 disabled:opacity-50 transition-opacity" style="background-color: var(--ui-accent); color: var(--ui-bg-main);" disabled={$isStreaming || currentQuestionTotal === 0} onclick={askCurrentQuestion} aria-label="Ask this question" title="Send the currently selected question to the models">Ask</button>
-    <button type="button" class="h-8 px-3 rounded-md text-xs font-semibold shrink-0 disabled:opacity-50 transition-opacity border" style="border-color: var(--ui-accent); color: var(--ui-accent); background: transparent;" disabled={$isStreaming || currentQuestionTotal === 0 || currentQuestionNum >= currentQuestionTotal} onclick={askNextQuestion} aria-label="Next question and ask" title="Advance to the next question and send it immediately">Next</button>
-    <!-- Group 3: Globe (connect/disconnect) + mode buttons (None | All | Judge only) -->
-    <div class="flex items-center gap-2">
-      <!-- Globe: click to connect/disconnect; same as cockpit -->
+    <div class="arena-bar-divider" aria-hidden="true"></div>
+    <!-- 2. Run: Ask + Next -->
+    <div class="arena-bar-section flex items-center gap-2" aria-label="Run">
+      <button type="button" class="h-8 px-4 rounded-md text-xs font-semibold shrink-0 disabled:opacity-50 transition-opacity" style="background-color: var(--ui-accent); color: var(--ui-bg-main);" disabled={$isStreaming || currentQuestionTotal === 0} onclick={askCurrentQuestion} aria-label="Ask this question" title="Send the currently selected question to the models">Ask</button>
+      <button type="button" class="h-8 px-3 rounded-md text-xs font-semibold shrink-0 disabled:opacity-50 transition-opacity border" style="border-color: var(--ui-accent); color: var(--ui-accent); background: transparent;" disabled={$isStreaming || currentQuestionTotal === 0 || currentQuestionNum >= currentQuestionTotal} onclick={askNextQuestion} aria-label="Next question and ask" title="Advance to next question and send it">Next</button>
+    </div>
+    <div class="arena-bar-divider" aria-hidden="true"></div>
+    <!-- 3. Web: globe + who gets it -->
+    <div class="arena-bar-section flex items-center gap-2" aria-label="Web">
       <button
         type="button"
         class="arena-globe-btn relative flex items-center justify-center shrink-0 w-8 h-8 rounded-md border transition-colors"
         class:arena-globe-active={$webSearchForNextMessage}
         style="border-color: {$webSearchForNextMessage ? 'var(--ui-accent)' : 'var(--ui-border)'}; background: {$webSearchForNextMessage ? 'color-mix(in srgb, var(--ui-accent) 14%, transparent)' : 'var(--ui-input-bg)'};"
         disabled={$isStreaming}
-        title={arenaWebWarmingUp ? 'Connecting to internet…' : $webSearchForNextMessage ? ($webSearchConnected ? 'Connected – click to disconnect' : 'Not connected – click to retry') : 'Click to connect to the internet'}
+        title={arenaWebWarmingUp ? 'Connecting…' : $webSearchForNextMessage ? ($webSearchConnected ? 'Connected – click to disconnect' : 'Not connected – click to retry') : 'Connect to internet'}
         onclick={() => {
           const on = $webSearchForNextMessage;
           const connected = $webSearchConnected;
@@ -1295,11 +1298,7 @@
         aria-label={arenaWebWarmingUp ? 'Connecting' : $webSearchForNextMessage ? 'Web connected' : 'Connect to web'}
         aria-pressed={$webSearchForNextMessage}
       >
-        <span
-          class="text-base leading-none"
-          class:arena-globe-spin={arenaWebWarmingUp}
-          aria-hidden="true"
-        >🌐</span>
+        <span class="text-base leading-none" class:arena-globe-spin={arenaWebWarmingUp} aria-hidden="true">🌐</span>
         {#if $webSearchForNextMessage}
           {#if $webSearchConnected}
             <span class="arena-globe-dot arena-globe-dot-green" aria-hidden="true"></span>
@@ -1308,43 +1307,45 @@
           {/if}
         {/if}
       </button>
-      <!-- Mode: who gets web access (only relevant when connected) -->
       <div class="flex h-8 rounded-md border overflow-hidden" style="border-color: var(--ui-border); background: var(--ui-input-bg); opacity: {$webSearchForNextMessage && $webSearchConnected ? '1' : '0.5'};">
-        <button type="button" class="arena-web-tab h-full px-2.5 text-[11px] font-medium" class:active={$arenaWebSearchMode === 'none'} onclick={() => { arenaWebSearchMode.set('none'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="No web search">None</button>
-        <button type="button" class="arena-web-tab h-full px-2.5 text-[11px] font-medium border-l" class:active={$arenaWebSearchMode === 'all'} style="border-color: var(--ui-border);" onclick={() => { arenaWebSearchMode.set('all'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="All models get web search">All</button>
-        <button type="button" class="arena-web-tab h-full px-2.5 text-[11px] font-medium border-l" class:active={$arenaWebSearchMode === 'judge'} style="border-color: var(--ui-border);" onclick={() => { arenaWebSearchMode.set('judge'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="Only the judge (slot A) gets web search to fact-check">Judge only</button>
+        <button type="button" class="arena-web-tab h-full px-2.5 text-[11px] font-medium" class:active={$arenaWebSearchMode === 'none'} onclick={() => { arenaWebSearchMode.set('none'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="No web">None</button>
+        <button type="button" class="arena-web-tab h-full px-2.5 text-[11px] font-medium border-l" class:active={$arenaWebSearchMode === 'all'} style="border-color: var(--ui-border);" onclick={() => { arenaWebSearchMode.set('all'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="All models">All</button>
+        <button type="button" class="arena-web-tab h-full px-2.5 text-[11px] font-medium border-l" class:active={$arenaWebSearchMode === 'judge'} style="border-color: var(--ui-border);" onclick={() => { arenaWebSearchMode.set('judge'); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="Judge only">Judge only</button>
       </div>
     </div>
-    <!-- Spacer: Judging is its own group, not part of Web -->
-    <div class="w-2 shrink-0" aria-hidden="true"></div>
-    <!-- Group 4: Judging (run scorer for B/C/D) – separate from Web -->
+    <div class="arena-bar-divider" aria-hidden="true"></div>
+    <!-- 4. Judge: score B/C/D -->
     {#if $arenaSlotAIsJudge}
-      <button type="button" class="h-8 px-3 rounded-md text-xs font-semibold shrink-0 disabled:opacity-50 transition-opacity" style="background-color: var(--ui-accent); color: var(--ui-bg-main);" disabled={!canRunJudgment} onclick={() => { if (canRunJudgment) runJudgment(); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="Run the model in slot A to score B/C/D responses">Judgment</button>
+      <div class="arena-bar-section flex items-center" aria-label="Judge">
+        <button type="button" class="h-8 px-4 rounded-md text-xs font-semibold shrink-0 disabled:opacity-50 transition-opacity" style="background-color: var(--ui-accent); color: var(--ui-bg-main);" disabled={!canRunJudgment} onclick={() => { if (canRunJudgment) runJudgment(); if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }} title="Score B/C/D using slot A">Judgment</button>
+      </div>
+      <div class="arena-bar-divider" aria-hidden="true"></div>
     {/if}
-    <!-- Right spacer: keeps Reset + Settings on the right -->
-    <div class="flex-1 min-w-4"></div>
-    <!-- Reset scores: visible so you can start a new competition -->
-    <button
-      type="button"
-      class="flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs font-medium shrink-0 transition-opacity hover:opacity-90"
-      style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-secondary);"
-      onclick={confirmResetScores}
-      aria-label="Reset all scores"
-      title="Set B/C/D scores back to 0 and start a new competition">
-      <span aria-hidden="true">↺</span>
-      <span>Reset scores</span>
-    </button>
-    <!-- Settings -->
-    <button
-      type="button"
-      class="flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs font-medium shrink-0 transition-opacity hover:opacity-90"
-      style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-secondary);"
-      onclick={() => { arenaSettingsOpen = true; if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }}
-      aria-label="Arena settings"
-      title="Arena settings">
-      <span aria-hidden="true">⚙</span>
-      <span>Settings</span>
-    </button>
+    <!-- Spacer: push tools right -->
+    <div class="flex-1 min-w-4" aria-hidden="true"></div>
+    <!-- 5. Tools: Reset + Settings -->
+    <div class="arena-bar-section flex items-center gap-2" aria-label="Tools">
+      <button
+        type="button"
+        class="flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs font-medium shrink-0 transition-opacity hover:opacity-90"
+        style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-secondary);"
+        onclick={confirmResetScores}
+        aria-label="Reset scores"
+        title="Reset B/C/D scores to 0">
+        <span aria-hidden="true">↺</span>
+        <span>Reset</span>
+      </button>
+      <button
+        type="button"
+        class="flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs font-medium shrink-0 transition-opacity hover:opacity-90"
+        style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-secondary);"
+        onclick={() => { arenaSettingsOpen = true; if ($settings.audio_enabled && $settings.audio_clicks) playClick($settings.audio_volume); }}
+        aria-label="Arena settings"
+        title="Questions, answer key, rules">
+        <span aria-hidden="true">⚙</span>
+        <span>Settings</span>
+      </button>
+    </div>
   </div>
 
   <!-- === Response panels A–D (resizable; panel A header has "Use as judge" checkbox) === -->
