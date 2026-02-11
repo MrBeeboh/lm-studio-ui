@@ -130,6 +130,7 @@ const FAMILY_DEFAULTS = {
     offload_kv_cache_to_gpu: true,
     gpu_offload: 'max',
     cpu_threads: 8,
+    n_parallel: 4,
     temperature: 0.7,
     max_tokens: 4096,
     top_p: 0.95,

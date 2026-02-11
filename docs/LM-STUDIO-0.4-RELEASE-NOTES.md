@@ -2,8 +2,8 @@
 
 This doc summarizes LM Studio 0.4.x changelog and API updates so the UI stays aligned with LM Studio’s features and behavior.
 
-**Last updated:** 2026-02-08.  
-**Sources:** [LM Studio Changelog](https://lmstudio.ai/changelog), [API Changelog](https://lmstudio.ai/docs/developer/api-changelog).
+**Last updated:** 2026-02-10.  
+**Sources:** [LM Studio Changelog](https://lmstudio.ai/changelog), [API Changelog](https://lmstudio.ai/docs/developer/api-changelog), [REST API](https://lmstudio.ai/docs/developer/rest), [TTL & Auto-Evict](https://lmstudio.ai/docs/developer/core/ttl-and-auto-evict).
 
 ---
 
@@ -88,3 +88,53 @@ This doc summarizes LM Studio 0.4.x changelog and API updates so the UI stays al
 | Load config (context_length, gpu, etc.) | Supported; n_parallel is set in LM Studio when loading (user sets in app or CLI). |
 
 **Recommendation:** Use **LM Studio 0.4.x** (0.4.1+ preferred): parallel inference, correct model listing via `/api/v1/models`, better token reporting. Optional future: support **n_parallel** in our load request if exposed, or **POST /v1/responses** for richer usage/cache stats.
+
+---
+
+## Deep dive: API landscape (as of 2026-02-10)
+
+### Inference endpoints comparison
+
+| Feature | `/api/v1/chat` (native) | `/v1/responses` | `/v1/chat/completions` (what we use) | `/v1/messages` (Anthropic) |
+|---------|-------------------------|-----------------|--------------------------------------|----------------------------|
+| Streaming | ✅ | ✅ | ✅ | ✅ |
+| Stateful chat | ✅ | ✅ | ❌ | ❌ |
+| Remote MCPs | ✅ | ✅ | ❌ | ❌ |
+| Custom tools | ❌ | ✅ | ✅ | ✅ |
+| Include assistant msgs | ❌ | ✅ | ✅ | ✅ |
+| Model load streaming events | ✅ | ❌ | ❌ | ❌ |
+| Specify context length in request | ✅ | ❌ | ❌ | ❌ |
+
+### Load API (`POST /api/v1/models/load`)
+
+**Documented params:** `model`, `context_length`, `eval_batch_size`, `flash_attention`, `num_experts`, `offload_kv_cache_to_gpu`, `echo_load_config`.  
+**We also send:** `gpu` (max/off/0–1), `n_threads` (CPU threads). These work; REST API may accept more than the minimal docs list.
+
+**n_parallel:** Set in LM Studio UI when loading, or via `lms load --parallel N`. Not clearly documented for REST load; may be app/CLI-only for now.
+
+### Idle TTL & Auto-Evict (VRAM efficiency)
+
+- **TTL**: Per-request `ttl` (seconds) auto-unloads model after idle. Default 60 min for JIT-loaded models. We pass `model_ttl_seconds` from settings into chat requests.
+- **Auto-Evict**: When ON (default), JIT keeps at most 1 model loaded; switching models unloads the previous. Frees VRAM when switching.
+- **Per-request TTL:** Works with both OpenAI-compat and REST. Example: `"ttl": 300` = 5 min idle before unload.
+
+### Stateful chats (`POST /api/v1/chat`)
+
+- Server stores conversation; returns `response_id`. Next request uses `previous_response_id` to continue.
+- **Benefit:** No need to resend full history; lower bandwidth and latency for long threads.
+- **Trade-off:** Our UI manages history in IndexedDB; stateful API would require a different flow. Good future option for long-running sessions.
+
+### What we already use well
+
+- `GET /api/v1/models` → all downloaded models in dropdowns ✅  
+- `POST /v1/chat/completions` (stream) → parallel inference when Arena sends multiple requests ✅  
+- `POST /api/v1/models/load` with context_length, eval_batch_size, flash_attention, gpu, offload_kv_cache_to_gpu ✅  
+- `ttl` in chat options → Idle TTL for VRAM ✅  
+
+### Optional future improvements
+
+1. **`POST /api/v1/models/unload`** – Unload model when user switches away; faster switching and lower VRAM.
+2. **`stream_options.include_usage`** (0.3.18+) – Get prompt/completion token counts during streaming.
+3. **`POST /v1/responses`** – Stateful + `input_tokens`/`cached_tokens`; better cache stats when available.
+4. **n_parallel in load** – If REST API supports it, set parallel slots when loading (e.g. 4 for Arena).
+5. **Stateful `/api/v1/chat`** – For very long conversations to avoid resending full history.

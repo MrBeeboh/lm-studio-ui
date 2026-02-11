@@ -97,6 +97,7 @@ export async function getModels() {
  * @param {boolean} [loadConfig.offload_kv_cache_to_gpu]
  * @param {string|number} [loadConfig.gpu_offload] - 'max' | 'off' | 0-1 (CLI: --gpu)
  * @param {number} [loadConfig.cpu_threads]
+ * @param {number} [loadConfig.n_parallel] - Max parallel predictions (0.4+; default 4). Improves Arena throughput.
  * @returns {Promise<{ type: string, instance_id: string, load_time_seconds: number, status: string, load_config?: object }>}
  */
 export async function loadModel(modelId, loadConfig = {}) {
@@ -110,6 +111,7 @@ export async function loadModel(modelId, loadConfig = {}) {
     body.gpu = g === 'max' || g === 'off' ? g : Number(g);
   }
   if (loadConfig.cpu_threads != null) body.n_threads = loadConfig.cpu_threads;
+  if (loadConfig.n_parallel != null && loadConfig.n_parallel >= 1) body.n_parallel = Math.min(32, Math.max(1, loadConfig.n_parallel));
   body.echo_load_config = true;
 
   const base = getLmStudioBase();
@@ -121,6 +123,27 @@ export async function loadModel(modelId, loadConfig = {}) {
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`LM Studio load: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
+/**
+ * Unload a model from memory (LM Studio 0.4+ REST API).
+ * Frees VRAM/RAM when switching models or when idle.
+ * @param {string} modelId - Model identifier
+ * @returns {Promise<{ status?: string }>}
+ */
+export async function unloadModel(modelId) {
+  if (!modelId || typeof modelId !== 'string') return {};
+  const base = getLmStudioBase();
+  const res = await fetch(`${base}/api/v1/models/unload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: modelId }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`LM Studio unload: ${res.status} ${text}`);
   }
   return res.json();
 }
@@ -156,6 +179,7 @@ export async function streamChatCompletion({ model, messages, options = {}, onCh
         model,
         messages,
         stream: true,
+        stream_options: { include_usage: true },
         temperature: options.temperature ?? 0.7,
         max_tokens: options.max_tokens ?? 4096,
         ...(options.top_p != null && { top_p: options.top_p }),

@@ -16,6 +16,7 @@
   import { getRecommendedSettingsForModel } from '$lib/modelDefaults.js';
   import { createConversation, listConversations, getMessageCount } from '$lib/db.js';
   import { getModelIcon, getQuantization, modelIconOverrides } from '$lib/modelIcons.js';
+  import { unloadModel } from '$lib/api.js';
 
   let responseHistory = $state([]);
   const MAX_HISTORY = 5;
@@ -139,6 +140,17 @@
   function openSettings() {
     settingsOpen.set(true);
   }
+
+  let unloadBusy = $state(false);
+  async function unloadCurrent() {
+    if (!currentModelId || unloadBusy) return;
+    unloadBusy = true;
+    try {
+      await unloadModel(currentModelId);
+    } finally {
+      unloadBusy = false;
+    }
+  }
 </script>
 
 <div
@@ -180,6 +192,13 @@
       {:else}
         <span class="text-xs opacity-70">Select model in header</span>
       {/if}
+      <button
+        type="button"
+        class="shrink-0 text-[10px] px-2 py-1 rounded border hover:opacity-90 disabled:opacity-50"
+        style="border-color: var(--ui-border); color: var(--ui-text-primary);"
+        onclick={unloadCurrent}
+        disabled={unloadBusy || !currentModelId}
+        title="Unload model from memory to free VRAM">{unloadBusy ? '…' : 'Unload'}</button>
       <button
         type="button"
         class="shrink-0 text-[10px] px-2 py-1 rounded border hover:opacity-90"

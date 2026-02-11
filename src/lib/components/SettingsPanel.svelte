@@ -2,7 +2,7 @@
   import { fly } from 'svelte/transition';
   import { backOut, quintOut } from 'svelte/easing';
   import { layout, globalDefault, updateGlobalDefault, selectedModelId, hardware, models, presetDefaultModels, lmStudioBaseUrl, voiceServerUrl } from '$lib/stores.js';
-  import { loadModel } from '$lib/api.js';
+  import { loadModel, unloadModel } from '$lib/api.js';
   import { getDefaultsForModel, BATCH_SIZE_MIN, BATCH_SIZE_MAX } from '$lib/modelDefaults.js';
 
   let { onclose } = $props();
@@ -25,6 +25,7 @@
     offload_kv_cache_to_gpu: true,
     gpu_offload: 'max',
     cpu_threads: 4,
+    n_parallel: 4,
   };
 
   const GPU_OFFLOAD_OPTIONS = [
@@ -46,6 +47,7 @@
   let offloadKvToGpu = $state(DEFAULTS.offload_kv_cache_to_gpu);
   let gpuOffload = $state(DEFAULTS.gpu_offload);
   let cpuThreads = $state(DEFAULTS.cpu_threads);
+  let nParallel = $state(DEFAULTS.n_parallel);
 
   $effect(() => {
     const g = $globalDefault;
@@ -60,6 +62,7 @@
     offloadKvToGpu = g.offload_kv_cache_to_gpu ?? DEFAULTS.offload_kv_cache_to_gpu;
     gpuOffload = g.gpu_offload ?? DEFAULTS.gpu_offload;
     cpuThreads = g.cpu_threads ?? DEFAULTS.cpu_threads;
+    nParallel = g.n_parallel ?? DEFAULTS.n_parallel;
   });
 
   const maxCpuThreads = $derived(Math.max(1, $hardware?.cpuLogicalCores ?? 4));
@@ -108,6 +111,7 @@
         offload_kv_cache_to_gpu: offloadKvToGpu,
         gpu_offload: gpuOffload,
         cpu_threads: Math.min(maxCpuThreads, Math.max(1, cpuThreads)),
+        n_parallel: Math.min(32, Math.max(1, nParallel)),
       });
       updateGlobalDefault({
         context_length: contextLength,
@@ -116,6 +120,7 @@
         offload_kv_cache_to_gpu: offloadKvToGpu,
         gpu_offload: gpuOffload,
         cpu_threads: cpuThreads,
+        n_parallel: nParallel,
       });
     } catch (e) {
       loadError = e?.message || 'Failed to apply load settings. Is LM Studio running?';
@@ -136,6 +141,7 @@
       offload_kv_cache_to_gpu: offloadKvToGpu,
       gpu_offload: gpuOffload,
       cpu_threads: Math.min(maxCpuThreads, Math.max(1, cpuThreads)),
+      n_parallel: nParallel,
     });
     onclose?.();
   }
@@ -154,6 +160,21 @@
     offloadKvToGpu = d.offload_kv_cache_to_gpu ?? DEFAULTS.offload_kv_cache_to_gpu;
     gpuOffload = d.gpu_offload ?? DEFAULTS.gpu_offload;
     cpuThreads = Math.min(maxCpuThreads, d.cpu_threads ?? maxCpuThreads);
+    nParallel = d.n_parallel ?? DEFAULTS.n_parallel;
+  }
+
+  let unloadApplying = $state(false);
+  async function unloadCurrentModel() {
+    if (!$selectedModelId) return;
+    unloadApplying = true;
+    loadError = null;
+    try {
+      await unloadModel($selectedModelId);
+    } catch (e) {
+      loadError = e?.message || 'Failed to unload. Is LM Studio running?';
+    } finally {
+      unloadApplying = false;
+    }
   }
 </script>
 
@@ -284,6 +305,17 @@
                 class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm" />
               <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">System: {maxCpuThreads} logical cores. Use up to this for best throughput.</p>
             </div>
+            <div>
+              <label for="settings-n-parallel" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-1">Parallel slots (n_parallel)</label>
+              <input
+                id="settings-n-parallel"
+                type="number"
+                min="1"
+                max="32"
+                bind:value={nParallel}
+                class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm" />
+              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Max concurrent predictions (0.4+). Default 4. Higher = better Arena throughput; no extra VRAM with unified KV.</p>
+            </div>
             <div class="flex items-center gap-4">
               <label class="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" bind:checked={flashAttention} class="rounded border-zinc-300 dark:border-zinc-600 accent-themed" />
@@ -297,13 +329,23 @@
             {#if loadError}
               <p class="text-sm text-red-600 dark:text-red-400">{loadError}</p>
             {/if}
-            <button
-              type="button"
-              class="w-full px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 text-sm font-medium"
-              onclick={applyLoadToModel}
-              disabled={loadApplying || !$selectedModelId}>
-              {loadApplying ? 'Applying…' : 'Apply to model'}
-            </button>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                class="flex-1 px-4 py-2 rounded-lg bg-zinc-800 dark:bg-zinc-600 text-white hover:bg-zinc-700 dark:hover:bg-zinc-500 disabled:opacity-50 text-sm font-medium"
+                onclick={applyLoadToModel}
+                disabled={loadApplying || !$selectedModelId}>
+                {loadApplying ? 'Applying…' : 'Apply to model'}
+              </button>
+              <button
+                type="button"
+                class="flex-1 px-4 py-2 rounded-lg border border-zinc-400 dark:border-zinc-500 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-50 text-sm font-medium"
+                onclick={unloadCurrentModel}
+                disabled={unloadApplying || !$selectedModelId}
+                title="Unload model from memory to free VRAM">
+                {unloadApplying ? 'Unloading…' : 'Unload'}
+              </button>
+            </div>
           </div>
         {/if}
       </div>

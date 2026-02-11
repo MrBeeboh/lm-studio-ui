@@ -195,6 +195,7 @@ const DEFAULT_SETTINGS = {
   offload_kv_cache_to_gpu: true,
   gpu_offload: 'max',
   cpu_threads: 4,
+  n_parallel: 4,
 };
 
 /** Global default (single set of defaults for all models). Persisted. Migrate once from old settingsByLayout. */
