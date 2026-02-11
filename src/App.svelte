@@ -225,7 +225,7 @@
           </div>
           <span class="text-xs" style="color: var(--ui-text-secondary);">Chat uses Model A</span>
         </div>
-        <div class="shrink-0" style="{HEADER_PRESET_MIN}"><PresetSelect compact={true} /></div>
+        <div class="shrink-0" style="{HEADER_PRESET_MIN}" title="Global system prompt preset. Arena slots can override this via per-slot Options."><PresetSelect compact={true} /></div>
         <div class="flex items-center shrink-0 pl-2 border-l" style="border-color: var(--ui-border); {HEADER_GROUP_GAP} {HEADER_THEME_MIN}" role="group" aria-label="Appearance">
           <UiThemeSelect compact={true} />
           <ThemeToggle />

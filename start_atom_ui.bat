@@ -17,15 +17,15 @@ echo [ATOM] Clearing port 8766 if in use (unload helper)...
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8766 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" 2>nul
 ping 127.0.0.1 -n 2 >nul
 
-echo [ATOM] Starting Unload helper (Port 8766)...
-start "ATOM Unload Helper" cmd /k "cd /d "%~dp0" && pip install -r scripts/requirements-unload.txt -q && python scripts/unload_helper_server.py"
-echo [ATOM] Starting Hardware metrics server (Port 5000)...
-start "ATOM Hardware Metrics" cmd /k "cd /d "%~dp0" && pip install -r scripts/requirements-hardware.txt -q && python scripts/hardware_server.py"
-echo [ATOM] Starting Voice server (Port 8765)...
-start "ATOM Voice Server" cmd /k "cd /d "%~dp0voice-server" && if exist .venv\Scripts\activate.bat (call .venv\Scripts\activate.bat && uvicorn app:app --host 0.0.0.0 --port 8765) else (echo Voice server not set up. See voice-server\README.md: python -m venv .venv, pip install -r requirements.txt && pause)"
+echo [ATOM] Starting Unload helper (Port 8766) [minimized]...
+start /min "ATOM Unload Helper" cmd /c "cd /d "%~dp0" && pip install -r scripts/requirements-unload.txt -q && python scripts/unload_helper_server.py"
+echo [ATOM] Starting Hardware metrics server (Port 5000) [minimized]...
+start /min "ATOM Hardware Metrics" cmd /c "cd /d "%~dp0" && pip install -r scripts/requirements-hardware.txt -q && python scripts/hardware_server.py"
+echo [ATOM] Starting Voice server (Port 8765) [minimized]...
+start /min "ATOM Voice Server" cmd /c "cd /d "%~dp0voice-server" && if exist .venv\Scripts\activate.bat (call .venv\Scripts\activate.bat && uvicorn app:app --host 0.0.0.0 --port 8765) else (echo Voice server not set up. See voice-server\README.md && pause)"
 
-echo [ATOM] Starting Frontend (Port 5173)...
-start "ATOM Frontend" cmd /k "npm run dev"
+echo [ATOM] Starting Frontend (Port 5173) [minimized]...
+start /min "ATOM Frontend" cmd /c "npm run dev"
 
 echo [ATOM] Waiting 10s for Vite dev server...
 ping 127.0.0.1 -n 11 >nul
@@ -34,7 +34,12 @@ echo [ATOM] Launching browser...
 start http://localhost:5173
 
 echo.
+echo [ATOM] All services started minimized in the taskbar.
 echo [ATOM] LM Studio: run on port 1234 for your models.
-echo [ATOM] Keep "ATOM Frontend", "ATOM Unload Helper", "ATOM Voice Server", and "ATOM Hardware Metrics" windows open.
-echo [ATOM] First time metrics? pip install -r scripts/requirements-hardware.txt . First time voice? voice-server\README.md
-pause
+echo [ATOM] Services running: Frontend (5173), Unload Helper (8766), Voice (8765), Hardware (5000).
+echo [ATOM] To stop everything, run kill_atom_ui.bat or close the minimized windows.
+echo.
+
+REM Minimize this launcher window too, then exit after a brief pause
+timeout /t 3 /nobreak >nul
+exit

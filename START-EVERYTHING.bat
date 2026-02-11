@@ -1,26 +1,23 @@
 @echo off
 setlocal
 title AI Stack Launcher
-
-REM Docker-free startup: LM Studio server + lm-studio-ui dev server.
-REM Use this path for your desktop shortcut: C:\CURSOR\lm-studio-ui\START-EVERYTHING.bat
-
 cd /d "%~dp0"
 
-REM Config
+REM Docker-free startup: LM Studio server + lm-studio-ui dev server.
+REM All child processes start minimized — no window spam.
+
 set "LM_PORT=1234"
-set "PAUSE_ON_EXIT=1"
 set "LM_GUI_PATH_1=%LOCALAPPDATA%\Programs\LM Studio\LM Studio.exe"
 set "LM_GUI_PATH_2=%ProgramFiles%\LM Studio\LM Studio.exe"
 
 echo [INFO] Starting AI stack from: %CD%
 
-REM 1) Start LM Studio headless server (port 1234). Keeps running in its own window.
+REM 1) Start LM Studio headless server (port 1234) — minimized.
 where lms >nul 2>nul
 if errorlevel 1 goto no_lms
 
-echo [INFO] Launching LM Studio server on port %LM_PORT%...
-start "LM Studio Server" cmd /k "lms server start --port %LM_PORT%"
+echo [INFO] Launching LM Studio server on port %LM_PORT% [minimized]...
+start /min "LM Studio Server" cmd /c "lms server start --port %LM_PORT%"
 goto start_ui
 
 :no_lms
@@ -28,7 +25,7 @@ echo [WARN] 'lms' CLI not found in PATH. Starting LM Studio UI instead.
 call :start_gui
 
 :start_ui
-REM 2) Ensure deps then start the chat UI dev server (Vite).
+REM 2) Ensure deps then start the chat UI dev server (Vite) — minimized.
 if not exist "node_modules" goto install_deps
 goto run_ui
 
@@ -37,16 +34,17 @@ echo Installing dependencies...
 call npm install
 
 :run_ui
-start "LM Studio UI" cmd /k "npm run dev"
+start /min "LM Studio UI" cmd /c "npm run dev"
 
 REM 3) Open browser when Vite is up (Vite default is 5173)
 timeout /t 5 /nobreak >nul
 start "" "http://localhost:5173"
 
 echo.
-echo Started: LM Studio server (port %LM_PORT%), lm-studio-ui dev server (5173), browser.
-echo Close the two command windows to stop the server and UI.
-if "%PAUSE_ON_EXIT%"=="1" pause
+echo [INFO] All services started minimized in the taskbar.
+echo [INFO] LM Studio server (port %LM_PORT%), lm-studio-ui dev server (5173), browser.
+echo [INFO] To stop: close the minimized windows or run kill_atom_ui.bat.
+timeout /t 3 /nobreak >nul
 exit /b 0
 
 :start_gui
