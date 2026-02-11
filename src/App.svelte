@@ -32,7 +32,9 @@
   const HEADER_MODEL_MIN = 'min-width: 13rem;';
   const HEADER_PRESET_MIN = 'min-width: 7rem;';
   const HEADER_THEME_MIN = 'min-width: 10rem;';
-  const HEADER_GAP = 'gap: 1.25rem;';
+  const HEADER_GROUP_GAP = 'gap: 0.75rem;';
+  const HEADER_BETWEEN_GROUPS = '1.25rem';
+  const HEADER_RIGHT_GROUP = 'margin-left: auto;';
 
   onMount(() => {
     function applyTheme(want) {
@@ -59,12 +61,25 @@
 
   onMount(() => {
     let pollId;
+    const POLL_MS = 30000; // 30s when visible – avoid pinging LM Studio too often so idle unload can run
+    const POLL_MS_HIDDEN = 60000; // 60s when tab hidden
     async function pollConnection() {
       lmStudioConnected.set(await checkLmStudioConnection());
-      pollId = setTimeout(pollConnection, 10000);
+      const interval = typeof document !== 'undefined' && document.visibilityState === 'hidden' ? POLL_MS_HIDDEN : POLL_MS;
+      pollId = setTimeout(pollConnection, interval);
+    }
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        clearTimeout(pollId);
+        pollConnection();
+      }
     }
     pollConnection();
-    return () => clearTimeout(pollId);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      clearTimeout(pollId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   });
 
   onMount(async () => {
@@ -115,24 +130,31 @@
 
   {#if $layout === 'cockpit'}
     <div class="flex h-full flex-col">
-      <header class="shrink-0 flex items-center flex-wrap px-3 py-2 border-b text-sm" style="border-color: var(--ui-border); background-color: var(--ui-bg-sidebar); color: var(--ui-text-secondary); {HEADER_GAP}">
-        <span class="flex items-center gap-1.5 font-semibold shrink-0" style="color: var(--ui-accent);"><AtomLogo size={20} />ATOM</span>
-        <nav class="flex items-center gap-0.5 shrink-0" aria-label="Layout">
-          {#each LAYOUT_OPTS as opt}
-            <button type="button" class="px-2 py-1 rounded text-xs {$layout === opt.value ? 'font-medium' : ''}" style="color: {$layout === opt.value ? 'var(--ui-accent)' : 'var(--ui-text-secondary)'}; background: {$layout === opt.value ? 'color-mix(in srgb, var(--ui-accent) 15%, transparent)' : 'transparent'};" onclick={() => layout.set(opt.value)}>{opt.label}</button>
-          {/each}
-        </nav>
-        <div class="shrink-0 overflow-hidden" style="{HEADER_MODEL_MIN}"><ModelSelector /></div>
-        <div class="shrink-0" style="{HEADER_PRESET_MIN}"><PresetSelect compact={true} /></div>
-        <div class="flex items-center gap-1.5 shrink-0 pl-2 ml-2 border-l" style="border-color: var(--ui-border); {HEADER_THEME_MIN}" role="group" aria-label="Theme">
+      <header class="shrink-0 flex items-center flex-wrap px-3 py-2 border-b text-sm" style="border-color: var(--ui-border); background-color: var(--ui-bg-sidebar); color: var(--ui-text-secondary); gap: {HEADER_BETWEEN_GROUPS};">
+        <div class="flex items-center shrink-0" style="{HEADER_GROUP_GAP}" role="group" aria-label="Brand and layout">
+          <span class="flex items-center gap-1.5 font-semibold shrink-0" style="color: var(--ui-accent);"><AtomLogo size={20} />ATOM</span>
+          <nav class="flex items-center gap-0.5 shrink-0" aria-label="Layout">
+            {#each LAYOUT_OPTS as opt}
+              <button type="button" class="px-2 py-1 rounded text-xs {$layout === opt.value ? 'font-medium' : ''}" style="color: {$layout === opt.value ? 'var(--ui-accent)' : 'var(--ui-text-secondary)'}; background: {$layout === opt.value ? 'color-mix(in srgb, var(--ui-accent) 15%, transparent)' : 'transparent'};" onclick={() => layout.set(opt.value)}>{opt.label}</button>
+            {/each}
+          </nav>
+        </div>
+        <div class="flex items-center shrink-0 overflow-hidden" style="{HEADER_GROUP_GAP}" role="group" aria-label="Model and preset">
+          <div class="shrink-0 overflow-hidden" style="{HEADER_MODEL_MIN}"><ModelSelector /></div>
+          <div class="shrink-0" style="{HEADER_PRESET_MIN}"><PresetSelect compact={true} /></div>
+        </div>
+        <div class="flex items-center shrink-0 pl-2 border-l" style="border-color: var(--ui-border); {HEADER_GROUP_GAP} {HEADER_THEME_MIN}" role="group" aria-label="Appearance">
           <UiThemeSelect compact={true} />
           <ThemeToggle />
         </div>
-        <span class="flex items-center gap-1.5 shrink-0 text-xs" style="color: var(--ui-text-secondary);" title={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking...'} aria-label={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking connection'}>
-          <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? '#ef4444' : '#94a3b8'};" aria-hidden="true"></span>
-          <span class="hidden sm:inline">LM Studio</span>
-        </span>
-        <button type="button" class="flex items-center gap-1.5 px-3 py-2 rounded-lg shrink-0 min-h-[44px] text-base transition-colors hover:opacity-90" style="color: var(--ui-text-secondary); background: color-mix(in srgb, var(--ui-border) 30%, transparent);" onclick={() => settingsOpen.set(true)} aria-label="Settings" title="Settings"><span class="text-lg leading-none" aria-hidden="true">⚙</span><span class="text-xs font-medium hidden sm:inline">Settings</span></button>
+        <div class="flex-1 min-w-4 shrink" aria-hidden="true"></div>
+        <div class="flex items-center shrink-0" style="{HEADER_GROUP_GAP} {HEADER_RIGHT_GROUP}" role="group" aria-label="Status and settings">
+          <span class="flex items-center gap-1.5 shrink-0 text-xs" style="color: var(--ui-text-secondary);" title={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking...'} aria-label={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking connection'}>
+            <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? '#ef4444' : '#94a3b8'};" aria-hidden="true"></span>
+            <span class="hidden sm:inline">LM Studio</span>
+          </span>
+          <button type="button" class="flex items-center gap-1.5 px-3 py-2 rounded-lg shrink-0 min-h-[44px] text-base transition-colors hover:opacity-90" style="color: var(--ui-text-secondary); background: color-mix(in srgb, var(--ui-border) 30%, transparent);" onclick={() => settingsOpen.set(true)} aria-label="Settings" title="Settings"><span class="text-lg leading-none" aria-hidden="true">⚙</span><span class="text-xs font-medium hidden sm:inline">Settings</span></button>
+        </div>
       </header>
       <div class="flex flex-1 min-h-0 min-w-0 relative">
         <ConvoRail />
@@ -180,17 +202,17 @@
 
   {:else if $layout === 'arena'}
     <div class="flex h-full flex-col">
-      <header class="shrink-0 flex items-center justify-between px-3 py-2 border-b flex-wrap" style="border-color: var(--ui-border); background-color: var(--ui-bg-sidebar); {HEADER_GAP}">
-        <div class="flex items-center gap-2 shrink-0">
+      <header class="shrink-0 flex items-center flex-wrap px-3 py-2 border-b text-sm" style="border-color: var(--ui-border); background-color: var(--ui-bg-sidebar); color: var(--ui-text-secondary); gap: {HEADER_BETWEEN_GROUPS};">
+        <div class="flex items-center shrink-0" style="{HEADER_GROUP_GAP}" role="group" aria-label="Brand and layout">
           <button type="button" class="md:hidden p-2 rounded min-h-[44px] min-w-[44px] flex items-center justify-center" style="color: var(--ui-text-secondary);" onclick={() => sidebarOpen.set(true)} aria-label="Open menu">☰</button>
           <span class="flex items-center gap-1.5 font-semibold shrink-0" style="color: var(--ui-accent);"><AtomLogo size={20} />ATOM Arena</span>
+          <nav class="flex items-center gap-0.5 shrink-0" aria-label="Layout">
+            {#each LAYOUT_OPTS as opt}
+              <button type="button" class="px-2 py-1 rounded text-xs {$layout === opt.value ? 'font-medium' : ''}" style="color: {$layout === opt.value ? 'var(--ui-accent)' : 'var(--ui-text-secondary)'}; background: {$layout === opt.value ? 'color-mix(in srgb, var(--ui-accent) 15%, transparent)' : 'transparent'};" onclick={() => layout.set(opt.value)}>{opt.label}</button>
+            {/each}
+          </nav>
         </div>
-        <nav class="flex items-center gap-0.5 shrink-0" aria-label="Layout">
-          {#each LAYOUT_OPTS as opt}
-            <button type="button" class="px-2 py-1 rounded text-xs {$layout === opt.value ? 'font-medium' : ''}" style="color: {$layout === opt.value ? 'var(--ui-accent)' : 'var(--ui-text-secondary)'}; background: {$layout === opt.value ? 'color-mix(in srgb, var(--ui-accent) 15%, transparent)' : 'transparent'};" onclick={() => layout.set(opt.value)}>{opt.label}</button>
-          {/each}
-        </nav>
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="flex items-center gap-2 shrink-0" style="{HEADER_GROUP_GAP}" role="group" aria-label="Arena panels">
           <span class="text-xs" style="color: var(--ui-text-secondary);" title="Alt+1 through Alt+4 to switch">Panels</span>
           <div class="flex rounded-lg border overflow-hidden" style="border-color: var(--ui-border);" role="group" aria-label="Arena panel count">
             {#each [1, 2, 3, 4] as n}
@@ -200,15 +222,18 @@
           <span class="text-xs" style="color: var(--ui-text-secondary);">Chat uses Model A</span>
         </div>
         <div class="shrink-0" style="{HEADER_PRESET_MIN}"><PresetSelect compact={true} /></div>
-        <div class="flex items-center gap-1.5 shrink-0 pl-2 ml-2 border-l" style="border-color: var(--ui-border); {HEADER_THEME_MIN}" role="group" aria-label="Theme">
+        <div class="flex items-center shrink-0 pl-2 border-l" style="border-color: var(--ui-border); {HEADER_GROUP_GAP} {HEADER_THEME_MIN}" role="group" aria-label="Appearance">
           <UiThemeSelect compact={true} />
           <ThemeToggle />
         </div>
-        <span class="flex items-center gap-1.5 shrink-0 text-xs" style="color: var(--ui-text-secondary);" title={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking...'} aria-label={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking connection'}>
-          <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? '#ef4444' : '#94a3b8'};" aria-hidden="true"></span>
-          <span class="hidden sm:inline">LM Studio</span>
-        </span>
-        <button type="button" class="flex items-center gap-1.5 px-3 py-2 rounded-lg shrink-0 min-h-[44px] text-base transition-colors hover:opacity-90" style="color: var(--ui-text-secondary); background: color-mix(in srgb, var(--ui-border) 30%, transparent);" onclick={() => settingsOpen.set(true)} aria-label="Settings" title="Settings"><span class="text-lg leading-none" aria-hidden="true">⚙</span><span class="text-xs font-medium hidden sm:inline">Settings</span></button>
+        <div class="flex-1 min-w-4 shrink" aria-hidden="true"></div>
+        <div class="flex items-center shrink-0" style="{HEADER_GROUP_GAP} {HEADER_RIGHT_GROUP}" role="group" aria-label="Status and settings">
+          <span class="flex items-center gap-1.5 shrink-0 text-xs" style="color: var(--ui-text-secondary);" title={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking...'} aria-label={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking connection'}>
+            <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? '#ef4444' : '#94a3b8'};" aria-hidden="true"></span>
+            <span class="hidden sm:inline">LM Studio</span>
+          </span>
+          <button type="button" class="flex items-center gap-1.5 px-3 py-2 rounded-lg shrink-0 min-h-[44px] text-base transition-colors hover:opacity-90" style="color: var(--ui-text-secondary); background: color-mix(in srgb, var(--ui-border) 30%, transparent);" onclick={() => settingsOpen.set(true)} aria-label="Settings" title="Settings"><span class="text-lg leading-none" aria-hidden="true">⚙</span><span class="text-xs font-medium hidden sm:inline">Settings</span></button>
+        </div>
       </header>
       <div class="flex flex-1 min-h-0 relative">
         <aside class="w-52 shrink-0 border-r overflow-auto hidden md:block" style="background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);"><Sidebar /></aside>
