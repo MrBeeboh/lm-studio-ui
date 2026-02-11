@@ -34,12 +34,21 @@ echo [ATOM] Launching browser...
 start http://localhost:5173
 
 echo.
-echo [ATOM] All services started minimized in the taskbar.
-echo [ATOM] LM Studio: run on port 1234 for your models.
-echo [ATOM] Services running: Frontend (5173), Unload Helper (8766), Voice (8765), Hardware (5000).
-echo [ATOM] To stop everything, run kill_atom_ui.bat or close the minimized windows.
+echo =============================================
+echo   ATOM UI is running!
+echo =============================================
+echo.
+echo   This PC:    http://localhost:5173
+echo   Phone/LAN:  http://10.0.0.51:5173
+echo.
+echo   To use on your Pixel: open Chrome and go to
+echo   http://10.0.0.51:5173
+echo.
+echo   LM Studio: run on port 1234 for your models.
+echo   To stop: run kill_atom_ui.bat
+echo =============================================
 echo.
 
-REM Minimize this launcher window too, then exit after a brief pause
-timeout /t 3 /nobreak >nul
+REM Keep this window open briefly so user can see the URL, then exit
+timeout /t 8 /nobreak >nul
 exit

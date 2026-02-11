@@ -1,17 +1,29 @@
 @echo off
 title ATOM UI - Open in browser
 :: ============================================================
-:: THIS IS THE ONLY FILE YOU NEED ON THE MINI.
-:: No other files. No project folder. Just this file.
+:: USE THIS ON ANY DEVICE ON YOUR NETWORK.
+:: Phone, tablet, mini PC, laptop — anything with a browser.
 ::
-:: 1. Copy this .bat file to your mini PC (e.g. Desktop).
-:: 2. Right-click it -> Edit. Change the IP below to your MAIN
-::    PC's IP (on main PC run: ipconfig -> use IPv4 Address).
-:: 3. On your main PC, start ATOM UI as usual (leave it running).
-:: 4. On the mini: double-click this file. Browser opens and
-::    loads the UI from your main PC. Done.
+:: On your MAIN PC: start ATOM UI as usual (leave it running).
+:: On the other device: open a browser and go to the URL below.
+::
+:: If you move this file to another device, just double-click it.
+:: On a phone: just type the URL into Chrome. That's it.
 :: ============================================================
-set MAIN_PC_IP=192.168.1.100
+set MAIN_PC_IP=10.0.0.51
 
-echo Opening ATOM UI at http://%MAIN_PC_IP%:5173
+echo.
+echo =============================================
+echo   ATOM UI — Access from any device
+echo =============================================
+echo.
+echo   Open this URL on your phone or tablet:
+echo.
+echo   http://%MAIN_PC_IP%:5173
+echo.
+echo   (Your PC must be running ATOM UI)
+echo =============================================
+echo.
+
 start "" "http://%MAIN_PC_IP%:5173"
+timeout /t 5 /nobreak >nul
