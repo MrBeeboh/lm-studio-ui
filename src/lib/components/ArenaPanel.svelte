@@ -9,7 +9,6 @@
   import { arenaSlotAIsJudge, arenaSlotOverrides, setArenaSlotOverride } from '$lib/stores.js';
   import { ARENA_SYSTEM_PROMPT_TEMPLATES } from '$lib/arenaLogic.js';
   import MessageBubble from '$lib/components/MessageBubble.svelte';
-  import ModelSelectorSlot from '$lib/components/ModelSelectorSlot.svelte';
 
   let {
     slot = 'A',
@@ -65,6 +64,14 @@
         const v = raw === '' ? undefined : parseFloat(raw);
         const safe = v !== undefined && !Number.isNaN(v) && v >= 1 && v <= 2 ? v : cur.repeat_penalty;
         setArenaSlotOverride(slot, { ...cur, repeat_penalty: safe });
+      } else if (key === 'presence_penalty') {
+        const v = raw === '' ? undefined : parseFloat(raw);
+        const safe = v !== undefined && !Number.isNaN(v) && v >= -2 && v <= 2 ? v : cur.presence_penalty;
+        setArenaSlotOverride(slot, { ...cur, presence_penalty: safe });
+      } else if (key === 'frequency_penalty') {
+        const v = raw === '' ? undefined : parseFloat(raw);
+        const safe = v !== undefined && !Number.isNaN(v) && v >= -2 && v <= 2 ? v : cur.frequency_penalty;
+        setArenaSlotOverride(slot, { ...cur, frequency_penalty: safe });
       }
     };
   }
@@ -122,6 +129,10 @@
         <input type="number" min="1" max="200" step="1" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides[slot]?.top_k ?? effectiveSettings.top_k} oninput={slotOverrideInput('top_k')} />
         <label class="text-zinc-500 dark:text-zinc-400">Repeat penalty</label>
         <input type="number" step="0.05" min="1" max="2" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides[slot]?.repeat_penalty ?? effectiveSettings.repeat_penalty} oninput={slotOverrideInput('repeat_penalty')} />
+        <label class="text-zinc-500 dark:text-zinc-400">Presence penalty</label>
+        <input type="number" step="0.1" min="-2" max="2" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides[slot]?.presence_penalty ?? effectiveSettings.presence_penalty} oninput={slotOverrideInput('presence_penalty')} />
+        <label class="text-zinc-500 dark:text-zinc-400">Frequency penalty</label>
+        <input type="number" step="0.1" min="-2" max="2" class="w-20 px-1.5 py-0.5 rounded border text-right font-mono" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" value={$arenaSlotOverrides[slot]?.frequency_penalty ?? effectiveSettings.frequency_penalty} oninput={slotOverrideInput('frequency_penalty')} />
       </div>
       <label class="block mt-1.5 text-zinc-500 dark:text-zinc-400">System prompt template</label>
       <select class="w-full mb-0.5 px-1.5 py-0.5 rounded border text-xs" style="border-color: var(--ui-border); background-color: var(--ui-bg-main); color: var(--ui-text-primary);" onchange={(e) => { const opt = ARENA_SYSTEM_PROMPT_TEMPLATES.find((t) => t.name === e.currentTarget?.value); if (opt?.prompt) applyTemplate(opt.prompt); }} aria-label="System prompt template">
