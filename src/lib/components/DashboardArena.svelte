@@ -134,7 +134,6 @@
   let arenaTransitionPhase = $state(/** @type {null | 'ejecting' | 'loading' | 'judge_web'} */ (null));
   /** Index of the current witty "judge checking web" message (rotated each time we enter judge_web). */
   let judgeWebMessageIndex = $state(0);
-  // JUDGE_WEB_LINES imported from arenaLogic.js
 
   // ---------- Score history (per-question breakdown) ----------
   let scoreHistory = $state(loadScoreHistory());
@@ -204,20 +203,7 @@
     } catch (_) {}
     return { x: defaultX, y: defaultY };
   }
-  // questionPanelPos removed — floating question panel no longer needed
   let askJudgePanelPos = $state(loadPanelPos('arenaAskJudgePanelPos', 16, 300));
-
-  function loadPanelSize(key, defaultW, defaultH) {
-    if (typeof localStorage === 'undefined') return { w: defaultW, h: defaultH };
-    try {
-      const s = localStorage.getItem(key);
-      if (!s) return { w: defaultW, h: defaultH };
-      const { w, h } = JSON.parse(s);
-      if (typeof w === 'number' && typeof h === 'number') return { w, h };
-    } catch (_) {}
-    return { w: defaultW, h: defaultH };
-  }
-  // questionPanelSize / QUESTION_PANEL_MIN removed — floating question panel no longer needed
 
   /**
    * Svelte action: make the panel draggable by its handle. Handle must be a direct child of the panel.
@@ -275,64 +261,6 @@
     };
   }
 
-  /**
-   * Svelte action: resize panel by dragging. Handle is on edge or corner.
-   * axis: 'e' = right edge (width), 's' = bottom edge (height), 'se' = corner (both).
-   */
-  function makeResizable(handleEl, params) {
-    if (!params || !handleEl) return;
-    const { storageKey, getSize, setSize, axis } = params;
-    const panelEl = handleEl.closest('.arena-floating-panel');
-    if (!panelEl) return;
-
-    let resizingActive = false;
-    function move(e) {
-      let { w, h } = getSize();
-      if (axis === 'e' || axis === 'se') {
-        w = Math.max(QUESTION_PANEL_MIN_W, startW + (e.clientX - startX));
-        w = Math.min(window.innerWidth - (panelEl.getBoundingClientRect().left || 0), w);
-      }
-      if (axis === 's' || axis === 'se') {
-        h = Math.max(QUESTION_PANEL_MIN_H, startH + (e.clientY - startY));
-        h = Math.min(window.innerHeight - (panelEl.getBoundingClientRect().top || 0), h);
-      }
-      setSize({ w, h });
-    }
-    function up() {
-      resizingActive = false;
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
-      if (typeof localStorage !== 'undefined' && storageKey) {
-        const size = getSize();
-        localStorage.setItem(storageKey, JSON.stringify({ w: size.w, h: size.h }));
-      }
-    }
-    let startX, startY, startW, startH;
-    function down(e) {
-      if (e.button !== 0) return;
-      e.preventDefault();
-      startX = e.clientX;
-      startY = e.clientY;
-      const sz = getSize();
-      startW = sz.w;
-      startH = sz.h;
-      resizingActive = true;
-      document.addEventListener('pointermove', move);
-      document.addEventListener('pointerup', up);
-    }
-    handleEl.addEventListener('pointerdown', down);
-    return {
-      destroy() {
-        handleEl.removeEventListener('pointerdown', down);
-        // Always clean up document listeners on destroy (prevents leaks if destroyed mid-resize)
-        if (resizingActive) {
-          document.removeEventListener('pointermove', move);
-          document.removeEventListener('pointerup', up);
-        }
-      },
-    };
-  }
-
   /** Eject-all in progress; message after (success or error). */
   let ejectBusy = $state(false);
   let ejectMessage = $state(/** @type {null | string} */ (null));
@@ -379,7 +307,6 @@
   });
 
   // ---------- Judge / scores ----------
-  // parseJudgeScores, arenaStandingLabel imported from arenaLogic.js
 
   function resetArenaScores() {
     arenaScores = { B: 0, C: 0, D: 0 };
@@ -429,7 +356,6 @@
   }
 
   // ---------- Per-slot overrides & system prompt templates ----------
-  // ARENA_SYSTEM_PROMPT_TEMPLATES imported from arenaLogic.js
   function applySystemPromptTemplate(slot, templatePrompt) {
     if (!templatePrompt) return;
     setArenaSlotOverride(slot, { ...($arenaSlotOverrides[slot] ?? {}), system_prompt: templatePrompt });
@@ -522,13 +448,6 @@
       ...over,
       system_prompt: over.system_prompt !== undefined && over.system_prompt !== '' ? over.system_prompt : base.system_prompt,
     };
-  }
-
-  function buildApiMessages(msgs, systemPromptOverride) {
-    const apiMessages = msgs.map((m) => ({ role: m.role, content: m.content }));
-    const systemPrompt = (systemPromptOverride ?? $settings.system_prompt)?.trim();
-    if (systemPrompt) apiMessages.unshift({ role: 'system', content: systemPrompt });
-    return apiMessages;
   }
 
   // ---------- Stream / send ----------
@@ -971,8 +890,6 @@
       ejectAllModels();
     }
   }
-
-  // contentToText imported from arenaLogic.js
 
   // ---------- Judgment & eject ----------
   async function runJudgment() {
