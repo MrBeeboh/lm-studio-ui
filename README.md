@@ -16,6 +16,10 @@ npm run dev
 
 Open http://localhost:5173. Choose a model from the dropdown, start a new chat, and send messages.
 
+## Git workflow
+
+Use the branch-based workflow guide in `docs/GIT-WORKFLOW.md` to keep GitHub as source of truth while testing locally in real time.
+
 ## Build
 
 ```bash
