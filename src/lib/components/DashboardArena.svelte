@@ -1834,7 +1834,7 @@
   <!-- === Sticky question text bar (always visible above panels) === -->
   {#if currentQuestionTotal > 0 && currentQuestionText}
     <div
-      class="shrink-0 flex items-center gap-2 px-4 py-1.5 border-b"
+      class="shrink-0 flex items-center gap-3 px-4 py-2.5 border-b"
       style="background-color: color-mix(in srgb, var(--ui-accent) 6%, var(--ui-bg-main)); border-color: var(--ui-border);"
     >
       <span
@@ -1842,7 +1842,7 @@
         style="color: var(--ui-accent);">Q{currentQuestionNum}</span
       >
       <span
-        class="text-xs truncate"
+        class="text-sm truncate"
         style="color: var(--ui-text-primary);"
         title={currentQuestionText}>{currentQuestionText}</span
       >
@@ -1878,6 +1878,7 @@
           accentColor={data.accentColor}
           showScore={data.showScore}
           loadStatus={null}
+          currentQuestionText={currentQuestionText}
         />
       {:else if data.slot === "B"}
         <ArenaPanel
@@ -1901,6 +1902,7 @@
           accentColor={data.accentColor}
           showScore={data.showScore}
           loadStatus={null}
+          currentQuestionText={currentQuestionText}
         />
       {:else if data.slot === "C"}
         <ArenaPanel
@@ -1924,6 +1926,7 @@
           accentColor={data.accentColor}
           showScore={data.showScore}
           loadStatus={null}
+          currentQuestionText={currentQuestionText}
         />
       {:else if data.slot === "D"}
         <ArenaPanel
@@ -1947,6 +1950,7 @@
           accentColor={data.accentColor}
           showScore={data.showScore}
           loadStatus={null}
+          currentQuestionText={currentQuestionText}
         />
       {/if}
       {#if i < slotData.length - 1 && !isMobile}
@@ -2080,8 +2084,28 @@
         <section>
           <h3 class="font-semibold text-sm mb-1" style="color: var(--ui-text-primary);">Arena Builder</h3>
           <p class="text-xs mb-2" style="color: var(--ui-text-secondary);">
-            Configure below, then click <strong>Build Arena</strong> on the bar. The judge model (selected below) will generate the question set. Toggle <strong>Internet Access (Judge)</strong> on the bar to allow web search during generation only.
+            Configure below, then click <strong>Build Arena</strong> on the bar. The judge model (selected below) will generate the question set.
           </p>
+          <div class="flex items-center gap-2 mb-3">
+            <span class="text-xs font-medium shrink-0" style="color: var(--ui-text-secondary);">Judge Internet Access</span>
+            <div class="flex h-8 rounded-md border overflow-hidden" style="border-color: var(--ui-border); background: var(--ui-input-bg);">
+              <button
+                type="button"
+                class="arena-web-tab h-full px-3 text-xs font-medium"
+                class:active={!$arenaBuilderInternetEnabled}
+                onclick={() => arenaBuilderInternetEnabled.set(false)}
+                title="Judge uses internal knowledge only when generating questions"
+              >OFF</button>
+              <button
+                type="button"
+                class="arena-web-tab h-full px-3 text-xs font-medium border-l"
+                class:active={$arenaBuilderInternetEnabled}
+                style="border-color: var(--ui-border);"
+                onclick={() => arenaBuilderInternetEnabled.set(true)}
+                title="Judge may use web search when generating questions"
+              >ON</button>
+            </div>
+          </div>
           <label for="arena-builder-categories" class="block text-xs font-medium mb-1" style="color: var(--ui-text-secondary);">Categories or topics (comma- or newline-separated)</label>
           <textarea
             id="arena-builder-categories"

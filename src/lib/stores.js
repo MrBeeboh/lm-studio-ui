@@ -389,6 +389,14 @@ if (typeof localStorage !== 'undefined') {
   arenaDeterministicJudge.subscribe((v) => localStorage.setItem('arenaDeterministicJudge', v ? '1' : '0'));
 }
 
+/** Arena Builder (Phase 1): Internet Access for judge during question generation only. Default OFF. Persisted. */
+export const arenaBuilderInternetEnabled = writable(
+  typeof localStorage !== 'undefined' ? (localStorage.getItem('arenaBuilderInternetEnabled') ?? '0') === '1' : false
+);
+if (typeof localStorage !== 'undefined') {
+  arenaBuilderInternetEnabled.subscribe((v) => localStorage.setItem('arenaBuilderInternetEnabled', v ? '1' : '0'));
+}
+
 /** Arena: per-slot overrides for temperature, max_tokens, system_prompt. Key = 'A'|'B'|'C'|'D'. Empty = use layout default. */
 function loadArenaSlotOverrides() {
   if (typeof localStorage === 'undefined') return {};

@@ -1,12 +1,11 @@
 <script>
   /**
    * ArenaPanel: Reusable response panel for Arena slots A–D.
-   * Shows: header (label + optional "Use as judge" for A), options accordion,
-   * scrollable message area, footer (score + standing + t/s + clear).
+   * Shows: header (label), options accordion, scrollable message area, footer (score + standing + t/s + clear).
    */
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
-  import { arenaSlotAIsJudge, arenaSlotOverrides, setArenaSlotOverride } from '$lib/stores.js';
+  import { arenaSlotOverrides, setArenaSlotOverride } from '$lib/stores.js';
   import { ARENA_SYSTEM_PROMPT_TEMPLATES } from '$lib/arenaLogic.js';
   import MessageBubble from '$lib/components/MessageBubble.svelte';
 
@@ -28,13 +27,23 @@
     scrollRef = $bindable(null),
     /** Per-slot accent color */
     accentColor = 'var(--ui-accent)',
-    /** Show score + standing in footer (false for slot A) */
-    showScore = false,
+    /** Show score + standing in footer */
+    showScore = true,
     /** Model load status: null | 'loading' | 'loaded' | 'error' */
     loadStatus = null,
+    /** When set, hide the user message that matches this (question is shown once in header) */
+    currentQuestionText = '',
   } = $props();
 
-  const isA = $derived(slot === 'A');
+  const displayMessages = $derived(
+    currentQuestionText
+      ? messages.filter(
+          (m) =>
+            m.role !== 'user' ||
+            (typeof m.content === 'string' ? m.content : '') !== currentQuestionText
+        )
+      : messages
+  );
 
   function slotOverrideInput(key) {
     return (e) => {
@@ -101,12 +110,6 @@
         <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background-color: #ef4444;" title="Load error"></span>
       {/if}
     </div>
-    {#if isA}
-      <label class="flex items-center gap-1.5 cursor-pointer select-none" title="When on, this model scores B/C/D responses when you click Judgment">
-        <input type="checkbox" bind:checked={$arenaSlotAIsJudge} class="rounded w-3 h-3" style="accent-color: var(--ui-accent);" />
-        <span style="color: var(--ui-text-primary);">Use as judge</span>
-      </label>
-    {/if}
   </div>
 
   <!-- Error -->
@@ -148,13 +151,11 @@
   <div class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden p-3 overscroll-contain" bind:this={scrollRef}>
     {#if !modelId}
       <div class="text-sm" style="color: var(--ui-text-secondary);">Select a model to start.</div>
-    {:else if isA && $arenaSlotAIsJudge && messages.length === 0}
-      <div class="text-sm" style="color: var(--ui-text-secondary);">Run a question so B/C/D respond, then click <strong>Judgment</strong> in the bar to score them.</div>
-    {:else if messages.length === 0}
+    {:else if displayMessages.length === 0}
       <div class="text-sm" style="color: var(--ui-text-secondary);">No responses yet.</div>
     {:else}
-      <div class="space-y-4">
-        {#each messages as msg (msg.id)}
+      <div class="space-y-5 py-1">
+        {#each displayMessages as msg (msg.id)}
           <MessageBubble message={msg} />
         {/each}
       </div>
@@ -162,10 +163,10 @@
   </div>
 
   <!-- Footer -->
-  <div class="shrink-0 flex justify-between items-center gap-2 px-2 py-1.5 border-t text-[11px]" style="border-color: var(--ui-border);">
+  <div class="shrink-0 flex justify-between items-center gap-2 px-2.5 py-2 border-t text-[11px]" style="border-color: var(--ui-border);">
     {#if showScore}
       <div class="flex items-center gap-2 min-w-0">
-        <span class="font-semibold tabular-nums shrink-0" style="color: {accentColor};">{score} pts</span>
+        <span class="arena-panel-score font-bold tabular-nums shrink-0 px-2 py-0.5 rounded text-xs" style="color: {accentColor}; background: color-mix(in srgb, {accentColor} 14%, transparent);">{score} pts</span>
         <span class="text-[10px] font-medium uppercase tracking-wide opacity-90" style="color: var(--ui-text-secondary);">{standingLabel}</span>
       </div>
     {:else}

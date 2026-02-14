@@ -260,10 +260,11 @@ function parseBlocksToQA(blocks, stripPrefixRegex) {
     let inAnswer = false;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      // Check for explicit "Answer:" label
-      if (/^\s*(?:Answer|A)\s*:\s*/i.test(line)) {
+      // Check for explicit "Answer:" or "Answer 1:" / "ANSWER 1:" style label (optional number)
+      const answerLabelRegex = /^\s*(?:Answer|A)\s*(?:\s*\d+\s*)?:\s*/i;
+      if (answerLabelRegex.test(line)) {
         inAnswer = true;
-        answerLines.push(line.replace(/^\s*(?:Answer|A)\s*:\s*/i, '').trim());
+        answerLines.push(line.replace(answerLabelRegex, '').trim());
       } else if (inAnswer) {
         answerLines.push(line);
       } else {
@@ -580,7 +581,7 @@ export function buildJudgePrompt({ slotsWithResponses, answerKeyTrimmed, judgeWe
     `COMPETING MODELS (authoritative—do not guess): This round has exactly ${competingSlots.length} model(s): ${competingList}. You must output exactly one line for each of these, in this order: ${competingList}. Do not add or mention Model E or any other model. Only ${competingList}. If a model has no response below, write: Model X: 0/10 - No response.`,
     '',
     answerKeyTrimmed
-      ? 'BASIS FOR SCORING: An ANSWER KEY is provided below. Judge whether each model\'s response is SUBSTANTIVELY CORRECT—meaning the factual content matches the answer key. IMPORTANT: If a model\'s response contains a line starting with "Final Answer:", use THAT line as the model\'s answer—ignore any verbose reasoning above it. If there is no "Final Answer:" line, evaluate the full response.\n\nSCORING EQUIVALENCES — all of these are the SAME correct answer and must receive the SAME high score:\n- "3" and "x=3" and "x = 3" (bare value = variable assignment when context is obvious)\n- "ampere" and "Ampere" and "AMPERE" (capitalization never matters)\n- "Electromagnetic force" and "electromagnetic force" and "EM force" (phrasing/abbreviation)\n- "H2O" and "water" (common synonyms)\nDo NOT penalize for omitting the variable name, extra explanation, or different phrasing. The ONLY question is: did the model give the right factual answer? A correct answer = 8-10. A partially correct answer = 4-7. A wrong answer = 1-3. No response = 0.'
+      ? 'BASIS FOR SCORING: An ANSWER KEY is provided below. Use it as the reference for the correct result. Your job is to decide whether each model\'s response is FUNCTIONALLY EQUIVALENT to the answer key—i.e. does it reach the same end result? You may equivocate: different wording, phrasing, or structure is fine as long as the meaning or result is the same. For math, the value or expression should be equivalent; for concepts, the same idea. If a model\'s response contains a line starting with "Final Answer:", use THAT line as the model\'s answer—ignore any verbose reasoning above it. If there is no "Final Answer:" line, evaluate the full response.\n\nExamples of equivalences you may recognize: "3" and "x=3" and "the answer is 3"; "ampere" and "Ampere"; "H2O" and "water"; longer explanations that conclude with the same result. Do NOT require word-for-word match. Do NOT penalize extra explanation, different phrasing, or formatting. Only ask: does the model\'s answer achieve the same result as the key? Same result = 8-10. Partially same or close = 4-7. Different result = 1-3. No response = 0.'
       : 'BASIS FOR SCORING: No answer key was provided. Use the WEB SEARCH section below (if present) to fact-check, or use your own knowledge to evaluate correctness. IMPORTANT: If a model\'s response contains a line starting with "Final Answer:", use THAT line as the model\'s answer—ignore any verbose reasoning above it. Focus on factual accuracy. Do NOT penalize for formatting, capitalization, phrasing, or omitting variable names (e.g. "3" and "x=3" are the same answer).',
     '',
     `CRITICAL OUTPUT FORMAT: Do NOT output <think> tags, chain-of-thought, reasoning, or any analysis. Do NOT write paragraphs. Your ENTIRE reply must be ONLY the score lines—nothing before them, nothing after. Start your very first character with "Model ${firstSlot}:". Any text before the first "Model" line is a format violation.`,
@@ -605,7 +606,7 @@ export function buildJudgePrompt({ slotsWithResponses, answerKeyTrimmed, judgeWe
   const userContent = parts.join('\n');
 
   const systemWithAnswerKey = answerKeyTrimmed
-    ? `You are a judge. An answer key is provided. A response is CORRECT if it gives the same factual answer as the key. Equivalences: "3" = "x=3" = "x = 3" (bare value is fine). "ampere" = "Ampere". Formatting and phrasing do NOT matter—only factual correctness. Score exactly ${competingSlots.length} model(s): ${competingList}. Output exactly one line for each, in that order. No other models. No <think>, no chain-of-thought, no analysis, no "Reasoning:" section. Start with "Model ${firstSlot}:".`
+    ? `You are a judge. An ANSWER KEY is provided—use it as the reference for the correct result. A response is CORRECT if it is functionally equivalent to the key (same end result), not necessarily word-for-word. Use your judgment to equate different phrasings, formats, or explanations that yield the same result. For math, same value or expression; for concepts, same meaning. Score exactly ${competingSlots.length} model(s): ${competingList}. Output exactly one line for each, in that order. No other models. No <think>, no chain-of-thought, no analysis. Start with "Model ${firstSlot}:".`
     : null;
 
   const messages = feedback
@@ -663,8 +664,8 @@ export function buildJudgePromptBlind({
     `There are exactly ${n} responses, labeled Response 1 through Response ${n}. You must output exactly one line per response, in order. Format: "Response 1: X/10 - one short reason." then "Response 2: X/10 - ..." and so on. If a response is missing or empty, write: Response N: 0/10 - No response.`,
     '',
     answerKeyTrimmed
-      ? `BASIS FOR SCORING: An ANSWER KEY is provided. Judge correctness against it. If a response contains a line "Final Answer:", use that line as the answer. Equivalences: "3" = "x=3", "ampere" = "Ampere". Correct = 8-10, partial = 4-7, wrong = 1-3, no response = 0.`
-      : 'BASIS FOR SCORING: Use the web search section (if present) or your knowledge. Focus on factual accuracy. Score 0-10 with a brief reason.',
+      ? `BASIS FOR SCORING: An ANSWER KEY is provided—use it as the reference for the correct result. Judge whether each response is FUNCTIONALLY EQUIVALENT (same end result), not word-for-word. You may equivocate between the key and the response: different wording or structure is fine if the result is the same. For math, same value; for concepts, same meaning. If a response contains "Final Answer:", use that line. Same result = 8-10, partial = 4-7, different result = 1-3, no response = 0.`
+      : 'BASIS FOR SCORING: No answer key was provided. Use the web search section (if present) or your own knowledge. Focus on factual accuracy. Score 0-10 with a brief reason.',
     '',
     'CRITICAL: Your ENTIRE reply must be ONLY the score lines. No <think>, no preamble, no analysis. Start with "Response 1:".',
     '',
@@ -684,8 +685,8 @@ export function buildJudgePromptBlind({
   const userContent = parts.join('\n');
 
   const systemContent = answerKeyTrimmed
-    ? `You are a judge. Score each response 0-10 against the answer key. Consider: ${criteriaLine}. Output ONLY "Response 1: X/10 - reason" through "Response ${n}: X/10 - reason". No other text.`
-    : `You are a judge. Score each response 0-10. Consider: ${criteriaLine}. Output ONLY the Response 1..${n} score lines. No other text.`;
+    ? `You are a judge. An ANSWER KEY is provided—use it as the reference for the correct result. Score each response 0-10 by whether it is functionally equivalent (same end result) to the key. Use your judgment to equate different phrasings or formats. Consider: ${criteriaLine}. Output ONLY "Response 1: X/10 - reason" through "Response ${n}: X/10 - reason". No other text.`
+    : `You are a judge. No answer key was provided. Use web search (if present) or your knowledge. Score each response 0-10. Consider: ${criteriaLine}. Output ONLY the Response 1..${n} score lines. No other text.`;
 
   const messages = feedback
     ? [
@@ -695,6 +696,67 @@ export function buildJudgePromptBlind({
     : [{ role: 'system', content: systemContent }, { role: 'user', content: userContent }];
 
   return { messages, responseOrder };
+}
+
+// ---------- Arena Builder (Phase 1: question generation) ----------
+
+/**
+ * Build messages for the judge to generate a structured question set (Phase 1).
+ * @param {{ categories: string[], questionCount: number, webContext?: string }} opts
+ * @returns {{ role: string, content: string }[]}
+ */
+export function buildArenaQuestionGenerationPrompt({ categories = [], questionCount = 10, webContext = '' }) {
+  const categoriesText =
+    categories.length > 0
+      ? categories.map((c) => c.trim()).filter(Boolean).join(', ')
+      : 'general knowledge';
+  const systemContent =
+    'You are generating a set of quiz questions for an AI model competition. Output ONLY a valid JSON array. Each element must have exactly "question" and "answer" keys (strings). No markdown, no code fence, no explanation—only the raw JSON array.';
+  const userParts = [
+    `Generate exactly ${questionCount} questions.`,
+    `Topics or categories: ${categoriesText}.`,
+    'Each question should be clear and answerable in a short phrase or sentence. Provide a concise correct answer for each.',
+    'Output format: [{"question":"...","answer":"..."}, ...]',
+  ];
+  if (webContext && webContext.trim()) {
+    userParts.push('');
+    userParts.push('--- WEB SEARCH CONTEXT (use to inform questions and answers) ---');
+    userParts.push(webContext.trim());
+  }
+  return [
+    { role: 'system', content: systemContent },
+    { role: 'user', content: userParts.join('\n') },
+  ];
+}
+
+/**
+ * Parse judge-generated content into { questions, answers }.
+ * Handles raw JSON array or JSON inside markdown code blocks.
+ * @param {string} rawContent
+ * @returns {{ questions: string[], answers: string[] } | null}
+ */
+export function parseGeneratedQuestionSet(rawContent) {
+  if (!rawContent || typeof rawContent !== 'string') return null;
+  let jsonStr = rawContent.trim();
+  const codeBlock = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlock) jsonStr = codeBlock[1].trim();
+  try {
+    const arr = JSON.parse(jsonStr);
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    const questions = [];
+    const answers = [];
+    for (const item of arr) {
+      const q = item?.question != null ? String(item.question).trim() : '';
+      const a = item?.answer != null ? String(item.answer).trim() : '';
+      if (q) {
+        questions.push(q);
+        answers.push(a);
+      }
+    }
+    return questions.length > 0 ? { questions, answers } : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------- Witty judge loading messages ----------
@@ -792,18 +854,34 @@ export function pickJudgeModel({ userChoice, contestantIds, availableModels }) {
 
 // ---------- Standing labels ----------
 
+const ORDINAL_LABELS = ['1st', '2nd', '3rd', '4th'];
+
 /**
- * Standing label for a slot: "Leader" | "2nd" | "3rd".
- * @param {string} slot - 'B' | 'C' | 'D'
- * @param {{ B: number, C: number, D: number }} scores
+ * Standing label for a slot, with proper tie handling.
+ * When models share the same score they share the same rank label (e.g. "Tied 1st").
+ * The leader (or co-leaders) get "Leader" instead of "Tied 1st" when alone, or "Tied 1st" when shared.
+ * @param {string} slot - 'A' | 'B' | 'C' | 'D'
+ * @param {Record<string, number>} scores - e.g. { A: 10, B: 15, C: 15, D: 5 }
  * @returns {string}
  */
 export function arenaStandingLabel(slot, scores) {
-  const order = ['A', 'B', 'C', 'D'].sort((a, b) => (scores[b] ?? 0) - (scores[a] ?? 0));
-  const idx = order.indexOf(slot);
-  if (idx === 0) return 'Leader';
-  if (idx === 1) return '2nd';
-  if (idx === 2) return '3rd';
-  if (idx === 3) return '4th';
-  return '—';
+  const activeSlots = ['A', 'B', 'C', 'D'].filter((s) => scores[s] !== undefined);
+  if (!activeSlots.length || scores[slot] === undefined) return '—';
+
+  // Get unique score values sorted descending
+  const uniqueScores = [...new Set(activeSlots.map((s) => scores[s] ?? 0))].sort((a, b) => b - a);
+
+  const myScore = scores[slot] ?? 0;
+  const rankIndex = uniqueScores.indexOf(myScore); // 0 = highest, 1 = second highest, etc.
+  const countAtMyScore = activeSlots.filter((s) => (scores[s] ?? 0) === myScore).length;
+  const tied = countAtMyScore > 1;
+
+  // All zeros = no scores yet
+  if (uniqueScores.length === 1 && uniqueScores[0] === 0) return '—';
+
+  if (rankIndex === 0 && !tied) return 'Leader';
+  if (rankIndex === 0 && tied) return 'Tied 1st';
+
+  const label = ORDINAL_LABELS[rankIndex] ?? `${rankIndex + 1}th`;
+  return tied ? `Tied ${label}` : label;
 }
