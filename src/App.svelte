@@ -3,7 +3,7 @@
   import { get } from 'svelte/store';
   import { fly } from 'svelte/transition';
   import { backOut, quintOut } from 'svelte/easing';
-  import { theme, sidebarOpen, settingsOpen, layout, dashboardModelA, dashboardModelB, dashboardModelC, dashboardModelD, activeConversationId, conversations, selectedModelId, uiTheme, sidebarCollapsed, cockpitIntelOpen, arenaPanelCount, arenaSlotAIsJudge, models, lmStudioConnected } from '$lib/stores.js';
+  import { theme, sidebarOpen, settingsOpen, layout, dashboardModelA, dashboardModelB, dashboardModelC, dashboardModelD, activeConversationId, conversations, selectedModelId, uiTheme, sidebarCollapsed, cockpitIntelOpen, arenaPanelCount, models, lmStudioConnected } from '$lib/stores.js';
   import { createConversation, listConversations, getMessageCount, getMessages } from '$lib/db.js';
   import { getModels } from '$lib/api.js';
   import Sidebar from '$lib/components/Sidebar.svelte';
@@ -241,13 +241,20 @@
       <div class="flex flex-1 min-h-0 relative">
         <aside
           class="shrink-0 border-r overflow-hidden hidden md:flex flex-col transition-[width] duration-200 relative min-w-0"
-          style="width: {$sidebarCollapsed ? '44px' : '13rem'}; background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);">
+          style="width: {$sidebarCollapsed ? '52px' : '13rem'}; background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);">
+          {#if $sidebarCollapsed}
+            <div class="panel-tab-strip-icon-wrap pr-1" aria-hidden="true">
+              <span class="panel-tab-strip-icon" title="Conversations">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+              </span>
+            </div>
+          {/if}
           <button
             type="button"
             class="panel-tab {sidebarTabBounce ? 'panel-tab-bounce' : ''}"
             style="--panel-tab-transform: translate(100%, -50%); top: 50%; right: 0; border-left: none; border-radius: 0 6px 6px 0;"
-            title={$sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-label={$sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={$sidebarCollapsed ? 'Expand sidebar (conversations)' : 'Collapse sidebar'}
+            aria-label={$sidebarCollapsed ? 'Expand sidebar (conversations)' : 'Collapse sidebar'}
             onclick={toggleSidebarCollapsed}>
             {#if $sidebarCollapsed}
               <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7" /></svg>

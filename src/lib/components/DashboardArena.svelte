@@ -36,10 +36,12 @@
     layout,
     lmStudioUnloadHelperUrl,
     confirm,
+    arenaBuilderInternetEnabled,
   } from "$lib/stores.js";
   import { playClick, playComplete } from "$lib/audio.js";
   import {
     streamChatCompletion,
+    requestChatCompletion,
     unloadModel,
     loadModel,
     waitUntilUnloaded,
@@ -65,12 +67,13 @@
     shouldSkipImageResizeForVision,
   } from "$lib/utils.js";
   import {
-    parseQuestionsAndAnswers,
     parseJudgeScores,
     parseJudgeScoresAndExplanations,
     parseBlindJudgeScores,
     buildJudgePrompt,
     buildJudgePromptBlind,
+    buildArenaQuestionGenerationPrompt,
+    parseGeneratedQuestionSet,
     makeSeededRandom,
     pickJudgeModel,
     sanitizeContestantResponse,
@@ -84,7 +87,6 @@
     addScoreRound,
     computeTotals,
     clearScoreHistory,
-    migrateOldQuestionsAndAnswers,
   } from "$lib/arenaLogic.js";
 
   // ---------- State ----------
@@ -119,37 +121,125 @@
     if (typeof localStorage !== "undefined" && contestRules !== undefined)
       localStorage.setItem("arenaContestRules", contestRules);
   });
-  /**
-   * Single "Questions & answers" block. Format:
-   *   1. Question text here
-   *   Answer: Optional answer for the judge (if omitted, judge uses web or own knowledge).
-   *   2. Next question
-   *   Answer: Next answer
-   * Persisted. Parsed into questions[] and answers[] (per-question; answers[i] may be '').
-   */
-  function loadQuestionsAndAnswers() {
-    if (typeof localStorage === "undefined") return "";
-    const next = localStorage.getItem("arenaQuestionsAndAnswers");
-    if (next != null && next !== "") return next;
-    const oldQ = localStorage.getItem("arenaQuestionsList") ?? "";
-    const oldA = localStorage.getItem("arenaAnswerKey") ?? "";
-    if (oldQ.trim() === "" && oldA.trim() === "") return "";
-    if (oldQ.trim() === "") return "";
-    return migrateOldQuestionsAndAnswers(oldQ, oldA);
-  }
-  let questionsAndAnswers = $state(loadQuestionsAndAnswers());
   let questionIndex = $state(0);
-  $effect(() => {
-    if (
-      typeof localStorage !== "undefined" &&
-      questionsAndAnswers !== undefined
-    )
-      localStorage.setItem("arenaQuestionsAndAnswers", questionsAndAnswers);
-  });
-
-  const { questions: parsedQuestions, answers: parsedAnswers } = $derived(
-    parseQuestionsAndAnswers(questionsAndAnswers),
+  /** Arena Builder: generated question set (Phase 1). Only set after successful Build Arena. */
+  let builtQuestionSet = $state(/** @type {{ questions: string[]; answers: string[] } | null} */ (null));
+  /** Metadata for audit: run_id, tool_calls, urls_accessed, timestamps. Set when Build Arena completes. */
+  let builtQuestionSetMeta = $state(
+    /** @type {null | { run_id: string; tool_calls: unknown[]; urls_accessed: string[]; timestamps: Record<string, number> }} */ (null),
   );
+  /** Builder config: categories and count. Persisted. */
+  let arenaBuilderCategories = $state(
+    typeof localStorage !== "undefined" ? (localStorage.getItem("arenaBuilderCategories") ?? "") : "",
+  );
+  let arenaBuilderQuestionCount = $state(
+    Math.min(
+      100,
+      Math.max(1, parseInt(typeof localStorage !== "undefined" ? localStorage.getItem("arenaBuilderQuestionCount") ?? "10" : "10", 10) || 10),
+    ),
+  );
+  $effect(() => {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("arenaBuilderCategories", arenaBuilderCategories ?? "");
+      localStorage.setItem("arenaBuilderQuestionCount", String(Math.min(100, Math.max(1, arenaBuilderQuestionCount || 1))));
+    }
+  });
+  /** Questions/answers used by the bar and run: only the built set after Build Arena. */
+  const parsedQuestions = $derived(builtQuestionSet ? builtQuestionSet.questions : []);
+  const parsedAnswers = $derived(builtQuestionSet ? builtQuestionSet.answers : []);
+  let buildArenaInProgress = $state(false);
+  let buildArenaError = $state("");
+  async function buildArena() {
+    buildArenaError = "";
+    const contestantIds = [
+      get(dashboardModelA),
+      get(dashboardModelB),
+      get(dashboardModelC),
+      get(dashboardModelD),
+    ].filter(Boolean);
+    const pick = pickJudgeModel({
+      userChoice: get(arenaScoringModelId)?.trim() || "",
+      contestantIds,
+      availableModels: get(models) || [],
+    });
+    if (pick.error || !pick.id) {
+      buildArenaError = pick.error || "No judge model available. Select a judge model in Arena Settings.";
+      return;
+    }
+    const judgeId = pick.id;
+    const categories = (arenaBuilderCategories || "")
+      .split(/[\n,]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const questionCount = Math.min(100, Math.max(1, arenaBuilderQuestionCount || 10));
+    buildArenaInProgress = true;
+    const runId = generateId();
+    const timestamps = { build_start: Date.now() };
+    let urlsAccessed = [];
+    try {
+      await unloadAllModelsNative();
+      await new Promise((r) => setTimeout(r, 500));
+      arenaTransitionPhase = "loading_judge";
+      await loadModel(judgeId);
+      await new Promise((r) => setTimeout(r, 800));
+      let webContext = "";
+      if (get(arenaBuilderInternetEnabled)) {
+        timestamps.search_start = Date.now();
+        const query =
+          categories.length > 0
+            ? `quiz questions and answers about ${categories.slice(0, 3).join(" ")}`
+            : "quiz questions and answers general knowledge";
+        try {
+          const searchResult = await searchDuckDuckGo(query);
+          webContext = formatSearchResultForChat(query, searchResult);
+          if (searchResult.related?.length) {
+            urlsAccessed = searchResult.related.map((r) => r.url).filter(Boolean);
+          }
+          if (searchResult.abstractUrl) urlsAccessed.unshift(searchResult.abstractUrl);
+        } catch (e) {
+          console.warn("[Arena Builder] Web search failed", e);
+        }
+        timestamps.search_end = Date.now();
+      }
+      timestamps.generation_start = Date.now();
+      const messages = buildArenaQuestionGenerationPrompt({
+        categories,
+        questionCount,
+        webContext,
+      });
+      const { content } = await requestChatCompletion({
+        model: judgeId,
+        messages,
+        options: { temperature: 0.6, max_tokens: 8192 },
+      });
+      timestamps.generation_end = Date.now();
+      const parsed = parseGeneratedQuestionSet(content);
+      if (!parsed || parsed.questions.length === 0) {
+        buildArenaError = "Judge did not return valid JSON. Try again or check the model.";
+        return;
+      }
+      builtQuestionSet = { questions: parsed.questions, answers: parsed.answers };
+      builtQuestionSetMeta = {
+        run_id: runId,
+        tool_calls: [],
+        urls_accessed: urlsAccessed,
+        timestamps: { ...timestamps },
+      };
+      questionIndex = 0;
+      if (judgeId) {
+        await unloadModel(judgeId);
+        await waitUntilUnloaded([judgeId], { pollIntervalMs: 400, timeoutMs: 15000 }).catch(() => {});
+      }
+    } catch (e) {
+      buildArenaError = e?.message || "Build Arena failed.";
+      if (judgeId) {
+        await unloadModel(judgeId).catch(() => {});
+      }
+    } finally {
+      buildArenaInProgress = false;
+      arenaTransitionPhase = null;
+    }
+  }
   /** Answer for the current question only (blank if none provided → judge uses web or own knowledge). */
   const currentQuestionAnswer = $derived(
     parsedQuestions.length > 0 && parsedAnswers.length > 0
@@ -167,8 +257,16 @@
       ? (parsedQuestions[questionIndex % parsedQuestions.length] || "").trim()
       : "",
   );
-  /** Arena settings panel (slide-out from right). */
-  let arenaSettingsOpen = $state(false);
+  /** Arena settings panel: docked right sidebar (collapsed = hidden, like left sidebar). */
+  let arenaSettingsCollapsed = $state(
+    typeof localStorage !== "undefined"
+      ? (localStorage.getItem("arenaSettingsCollapsed") ?? "0") === "1"
+      : false,
+  );
+  $effect(() => {
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem("arenaSettingsCollapsed", arenaSettingsCollapsed ? "1" : "0");
+  });
   // ---------- Web globe (same behavior as cockpit ChatInput globe) ----------
   let arenaWebWarmingUp = $state(false);
   let arenaWebWarmUpAttempted = $state(false);
@@ -1139,7 +1237,6 @@
     });
     if (ok) {
       resetArenaScores();
-      arenaSettingsOpen = false;
     }
   }
 
@@ -1153,7 +1250,6 @@
       danger: false,
     });
     if (ok) {
-      arenaSettingsOpen = false;
       ejectAllModels();
     }
   }
@@ -1558,7 +1654,7 @@
       standingLabel: arenaStandingLabel(slot, arenaScores),
       effectiveSettings: effectiveSettings[slot],
       accentColor: SLOT_COLORS[slot],
-      showScore: slot !== "A",
+      showScore: true,
     }));
   });
 
@@ -1712,6 +1808,9 @@
     currentQuestionNum={currentQuestionNum}
     currentQuestionTotal={currentQuestionTotal}
     parsedQuestions={parsedQuestions}
+    builtQuestionCount={builtQuestionSet ? builtQuestionSet.questions.length : 0}
+    buildArenaInProgress={buildArenaInProgress}
+    onBuildArena={buildArena}
     runAllActive={runAllActive}
     runAllProgress={runAllProgress}
     arenaWebWarmingUp={arenaWebWarmingUp}
@@ -1725,8 +1824,12 @@
     stopRunAll={stopRunAll}
     runArenaWarmUp={runArenaWarmUp}
     startOver={startOver}
-    onOpenSettings={() => (arenaSettingsOpen = true)}
   />
+
+  <!-- === Main content + docked right settings panel === -->
+  <div class="flex-1 min-h-0 flex relative">
+  <!-- Main content column -->
+  <div class="flex-1 min-w-0 flex flex-col min-h-0">
 
   <!-- === Sticky question text bar (always visible above panels) === -->
   {#if currentQuestionTotal > 0 && currentQuestionText}
@@ -1926,7 +2029,193 @@
     </section>
   </div>
 
-  <!-- Floating question panel removed: question now shows cleanly in each slot's chat bubble -->
+  </div><!-- end main content column -->
+
+  <!-- === Docked right settings panel (like left sidebar). When collapsed, show a visible strip so the tab is never clipped. === -->
+  {#if arenaSettingsCollapsed}
+    <div
+      class="arena-settings-tab-strip shrink-0 hidden md:flex items-center justify-center relative min-h-0 border-l"
+      style="width: 52px; background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);"
+    >
+      <div class="panel-tab-strip-icon-wrap pl-1" aria-hidden="true">
+        <span class="panel-tab-strip-icon" title="Arena settings">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" /></svg>
+        </span>
+      </div>
+      <button
+        type="button"
+        class="panel-tab"
+        style="--panel-tab-transform: translate(-100%, -50%); left: 0; top: 50%; border-right: none; border-radius: 6px 0 0 6px;"
+        title="Show Arena settings"
+        aria-label="Show Arena settings"
+        onclick={() => (arenaSettingsCollapsed = false)}
+      >
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 19l-7-7 7-7" /></svg>
+      </button>
+    </div>
+  {:else}
+    <aside
+      class="shrink-0 border-l hidden md:flex flex-col transition-[width] duration-200 relative overflow-visible"
+      style="width: 320px; background-color: var(--ui-bg-main); border-color: var(--ui-border);"
+    >
+      <button
+        type="button"
+        class="panel-tab"
+        style="--panel-tab-transform: translate(-100%, -50%); top: 50%; left: 0; border-right: none; border-radius: 6px 0 0 6px;"
+        title="Hide Arena settings"
+        aria-label="Hide Arena settings"
+        onclick={() => (arenaSettingsCollapsed = true)}
+      >
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7" /></svg>
+      </button>
+      <div class="w-full flex flex-col min-h-0 h-full min-w-0 overflow-hidden">
+      <div
+        class="shrink-0 flex items-center justify-between px-4 py-3 border-b"
+        style="border-color: var(--ui-border);"
+      >
+        <h2 class="text-sm font-semibold" style="color: var(--ui-text-primary);">Arena Settings</h2>
+      </div>
+      <div class="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+        <!-- 1. Arena Builder (Phase 1: question generation) -->
+        <section>
+          <h3 class="font-semibold text-sm mb-1" style="color: var(--ui-text-primary);">Arena Builder</h3>
+          <p class="text-xs mb-2" style="color: var(--ui-text-secondary);">
+            Configure below, then click <strong>Build Arena</strong> on the bar. The judge model (selected below) will generate the question set. Toggle <strong>Internet Access (Judge)</strong> on the bar to allow web search during generation only.
+          </p>
+          <label for="arena-builder-categories" class="block text-xs font-medium mb-1" style="color: var(--ui-text-secondary);">Categories or topics (comma- or newline-separated)</label>
+          <textarea
+            id="arena-builder-categories"
+            class="w-full rounded-md resize-y text-[13px] font-sans mb-3"
+            style="padding: 10px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 72px;"
+            placeholder="e.g. physics, algorithms, history"
+            rows="3"
+            bind:value={arenaBuilderCategories}
+          ></textarea>
+          <label for="arena-builder-count" class="block text-xs font-medium mb-1" style="color: var(--ui-text-secondary);">Number of questions</label>
+          <input
+            id="arena-builder-count"
+            type="number"
+            min="1"
+            max="100"
+            class="w-full rounded-md text-[13px] font-sans px-3 py-2 border"
+            style="background-color: var(--ui-input-bg); border-color: var(--ui-border); color: var(--ui-text-primary);"
+            bind:value={arenaBuilderQuestionCount}
+          />
+          {#if buildArenaError}
+            <p class="text-xs mt-2 font-medium" style="color: var(--atom-teal);" role="alert">{buildArenaError}</p>
+          {/if}
+        </section>
+        <!-- 2. Judge instructions -->
+        <section>
+          <h3 class="font-semibold text-sm mb-1" style="color: var(--ui-text-primary);">Judge instructions</h3>
+          <textarea
+            class="w-full rounded-md resize-y text-[13px] font-sans"
+            style="padding: 10px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 60px;"
+            placeholder="Custom rubric, e.g. Weight accuracy 60%, conciseness 20%, formatting 20%."
+            rows="2"
+            bind:value={judgeInstructions}
+          ></textarea>
+        </section>
+        <!-- 3. Judge feedback -->
+        <section>
+          <h3 class="font-semibold text-sm mb-1" style="color: var(--ui-text-primary);">Judge feedback</h3>
+          <textarea
+            class="w-full rounded-md resize-y text-[13px] font-sans"
+            style="padding: 10px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 60px;"
+            placeholder="Optional correction, e.g. The correct answer to Q3 is 42."
+            rows="2"
+            bind:value={judgeFeedback}
+          ></textarea>
+        </section>
+        <!-- 4. Contest rules (accordion) -->
+        <section>
+          <button
+            type="button"
+            class="w-full flex items-center justify-between text-left font-semibold text-sm mb-2"
+            style="color: var(--ui-text-primary);"
+            onclick={() => (settingsRulesExpanded = !settingsRulesExpanded)}
+            aria-expanded={settingsRulesExpanded}
+          >Contest rules <span aria-hidden="true">{settingsRulesExpanded ? "▼" : "▶"}</span></button>
+          {#if settingsRulesExpanded}
+            <textarea
+              class="w-full px-3 py-2 rounded-lg border text-xs resize-y max-h-[200px]"
+              style="border-color: var(--ui-border); background-color: var(--ui-input-bg); color: var(--ui-text-primary);"
+              placeholder="Sent with every question."
+              rows="3"
+              bind:value={contestRules}
+            ></textarea>
+          {/if}
+        </section>
+        <!-- 5. Execution -->
+        <section>
+          <h3 class="font-semibold text-sm mb-2" style="color: var(--ui-text-primary);">Execution</h3>
+          <label class="flex items-start gap-2 cursor-pointer text-xs" style="color: var(--ui-text-secondary);">
+            <input type="checkbox" bind:checked={$arenaBlindReview} class="rounded mt-0.5" style="accent-color: var(--ui-accent);" />
+            <span>Blind review (shuffled, anonymous)</span>
+          </label>
+          <label class="flex items-start gap-2 cursor-pointer text-xs mt-1.5" style="color: var(--ui-text-secondary);">
+            <input type="checkbox" bind:checked={$arenaDeterministicJudge} class="rounded mt-0.5" style="accent-color: var(--ui-accent);" />
+            <span>Deterministic judge (temp 0)</span>
+          </label>
+        </section>
+        <!-- 6. Judge model -->
+        <section>
+          <h3 class="font-semibold text-sm mb-2" style="color: var(--ui-text-primary);">Judge model</h3>
+          <select
+            class="w-full px-3 py-2 rounded-lg border text-sm"
+            style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
+            aria-label="Judge model"
+            value={$arenaScoringModelId || "__auto__"}
+            onchange={(e) => {
+              const v = e.currentTarget?.value;
+              arenaScoringModelId.set(v === "__auto__" || !v ? "" : v);
+            }}
+          >
+            <option value="__auto__">Auto (largest non-contestant)</option>
+            {#each $models.filter((m) => {
+              const cIds = [$dashboardModelA, $dashboardModelB, $dashboardModelC, $dashboardModelD].map((s) => (s || "").trim().toLowerCase()).filter(Boolean);
+              return !cIds.includes((m.id || "").trim().toLowerCase());
+            }) as m (m.id)}
+              <option value={m.id}>{m.id}</option>
+            {/each}
+          </select>
+        </section>
+        <!-- 7. Score breakdown -->
+        <section>
+          <h3 class="font-semibold text-sm mb-2" style="color: var(--ui-text-primary);">Score breakdown</h3>
+          <ArenaScoreMatrix
+            {scoreHistory}
+            totals={arenaScores}
+            visibleSlots={$arenaPanelCount >= 4 ? ["A","B","C","D"] : $arenaPanelCount >= 3 ? ["A","B","C"] : $arenaPanelCount >= 2 ? ["A","B"] : ["A"]}
+          />
+        </section>
+        <!-- 8. Actions -->
+        <section>
+          <h3 class="font-semibold text-sm mb-2" style="color: var(--ui-text-primary);">Actions</h3>
+          <div class="flex flex-col gap-2">
+            <button
+              type="button"
+              class="w-full px-3 py-2 rounded-lg text-sm font-medium border"
+              style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-secondary);"
+              onclick={confirmResetScores}
+            >Reset all scores</button>
+            <button
+              type="button"
+              class="w-full px-3 py-2 rounded-lg text-sm font-medium border disabled:opacity-50"
+              style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-secondary);"
+              disabled={ejectBusy}
+              onclick={confirmEjectAll}
+            >{ejectBusy ? "Ejecting…" : "Eject all models"}</button>
+            {#if ejectMessage}
+              <span class="text-xs" style="color: var(--atom-teal);" role="status">{ejectMessage}</span>
+            {/if}
+          </div>
+        </section>
+      </div>
+    </div>
+    </aside>
+  {/if}
+  </div><!-- end flex row -->
 
   <!-- Judgment result popup (scores + explanation after automated judging) -->
   {#if judgmentPopup}
@@ -2052,312 +2341,5 @@
     </div>
   {/if}
 
-  <!-- === Arena settings: slide-out from right (Questions, Answer key, Contest rules, Execution, Web search, Actions) === -->
-  {#if arenaSettingsOpen}
-    <div
-      class="fixed inset-0 z-[200] transition-opacity duration-300"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Arena settings"
-    >
-      <div
-        class="absolute inset-0 bg-black/30"
-        role="button"
-        tabindex="-1"
-        aria-label="Close settings"
-        onclick={() => (arenaSettingsOpen = false)}
-        onkeydown={(e) => e.key === "Escape" && (arenaSettingsOpen = false)}
-      ></div>
-      <div
-        class="absolute top-0 right-0 bottom-0 w-[320px] flex flex-col border-l shadow-xl transition-transform duration-300"
-        style="background-color: var(--ui-bg-main); border-color: var(--ui-border);"
-      >
-        <div
-          class="shrink-0 flex items-center justify-between px-4 py-4 border-b"
-          style="border-color: var(--ui-border);"
-        >
-          <h2
-            class="text-base font-semibold"
-            style="color: var(--ui-text-primary);"
-          >
-            Arena settings
-          </h2>
-          <button
-            type="button"
-            class="p-2 rounded-lg hover:opacity-80"
-            style="color: var(--ui-text-secondary);"
-            onclick={() => (arenaSettingsOpen = false)}
-            aria-label="Close">×</button
-          >
-        </div>
-        <div class="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-          <!-- 1. Questions & answers (one block: optional Answer: per question) -->
-          <section>
-            <h3
-              class="font-semibold text-sm mb-1"
-              style="color: var(--ui-text-primary);"
-            >
-              Questions & answers
-            </h3>
-            <p class="text-xs mb-3" style="color: var(--ui-text-secondary);">
-              Paste questions and optional answers in one place. Number each
-              question (1. … 2. …). Add a line <strong>Answer: …</strong> under a
-              question to give the judge that answer for scoring. If you omit Answer:
-              for a question, the judge uses web (if on) or its own knowledge.
-            </p>
-            <textarea
-              id="arena-questions-and-answers-settings"
-              class="w-full rounded-md resize-y text-[13px] font-sans"
-              style="padding: 12px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 220px;"
-              placeholder="1. What is the primary function of a differential?
-Answer: To allow the drive wheels to rotate at different speeds (e.g. when turning).
-
-2. Who built the first practical steam engine?
-Answer: Thomas Newcomen.
-
-3. Question with no answer (judge uses web or own knowledge)"
-              rows="12"
-              bind:value={questionsAndAnswers}
-            ></textarea>
-            {#if parsedQuestions.length > 0}
-              {@const withAnswers = parsedAnswers.filter(
-                (a) => (a || "").trim().length > 0,
-              ).length}
-              <p
-                class="text-[11px] mt-1.5 font-medium"
-                style="color: var(--ui-accent);"
-              >
-                {parsedQuestions.length} question{parsedQuestions.length === 1
-                  ? ""
-                  : "s"} loaded · {withAnswers} with answers
-              </p>
-            {/if}
-          </section>
-          <!-- 2. Judge instructions (custom rubric) -->
-          <section>
-            <h3
-              class="font-semibold text-sm mb-1"
-              style="color: var(--ui-text-primary);"
-            >
-              Judge instructions
-            </h3>
-            <p class="text-xs mb-2" style="color: var(--ui-text-secondary);">
-              Custom rubric or scoring instructions for the judge. Replaces the
-              default "Score 1-10" preamble. Leave blank for default.
-            </p>
-            <textarea
-              id="arena-judge-instructions-settings"
-              class="w-full rounded-md resize-y text-[13px] font-sans"
-              style="padding: 10px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 70px;"
-              placeholder="e.g. You are a judge. Score each model 1-10. Weight accuracy 60%, conciseness 20%, formatting 20%. Penalize factual errors heavily."
-              rows="3"
-              bind:value={judgeInstructions}
-            ></textarea>
-          </section>
-          <!-- 3. Judge feedback / correction -->
-          <section>
-            <h3
-              class="font-semibold text-sm mb-1"
-              style="color: var(--ui-text-primary);"
-            >
-              Judge feedback / correction
-            </h3>
-            <p class="text-xs mb-2" style="color: var(--ui-text-secondary);">
-              Optional correction or rubric hint sent to the judge when scoring.
-              Use this to steer scoring (e.g. "NFPA 72 requires X, not Y" or
-              "weight conciseness higher"). Leave blank for default scoring.
-            </p>
-            <textarea
-              id="arena-judge-feedback-settings"
-              class="w-full rounded-md resize-y text-[13px] font-sans"
-              style="padding: 10px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 70px;"
-              placeholder="e.g. The correct answer to Q3 is actually 42, not 37. Weight accuracy over style."
-              rows="3"
-              bind:value={judgeFeedback}
-            ></textarea>
-          </section>
-          <!-- 3. Contest rules (accordion, collapsed by default) -->
-          <section>
-            <button
-              type="button"
-              class="w-full flex items-center justify-between text-left font-semibold text-sm mb-3"
-              style="color: var(--ui-text-primary);"
-              onclick={() => (settingsRulesExpanded = !settingsRulesExpanded)}
-              aria-expanded={settingsRulesExpanded}
-            >
-              Contest rules
-              <span aria-hidden="true"
-                >{settingsRulesExpanded ? "▼" : "▶"}</span
-              >
-            </button>
-            {#if settingsRulesExpanded}
-              <textarea
-                id="arena-contest-rules-settings"
-                class="w-full px-3 py-2 rounded-lg border text-xs resize-y max-h-[200px]"
-                style="border-color: var(--ui-border); background-color: var(--ui-input-bg); color: var(--ui-text-primary);"
-                placeholder="Paste contest rules. Sent with every question."
-                rows="4"
-                bind:value={contestRules}
-              ></textarea>
-            {/if}
-          </section>
-          <!-- Execution mode -->
-          <section>
-            <h3
-              class="font-semibold text-sm mb-3"
-              style="color: var(--ui-text-primary);"
-            >
-              Execution
-            </h3>
-            <p class="text-sm mb-3" style="color: var(--ui-text-secondary);">
-              One model at a time: each contestant loads, answers, then is ejected before the next. No more than one model is ever loaded.
-            </p>
-            <label class="flex items-start gap-2 cursor-pointer text-sm" style="color: var(--ui-text-secondary);">
-              <input type="checkbox" bind:checked={$arenaBlindReview} class="rounded mt-0.5" style="accent-color: var(--ui-accent);" />
-              <span>Blind review (judge sees "Response 1", "Response 2" in shuffled order — no model identity)</span>
-            </label>
-            <label class="flex items-start gap-2 cursor-pointer text-sm mt-2" style="color: var(--ui-text-secondary);">
-              <input type="checkbox" bind:checked={$arenaDeterministicJudge} class="rounded mt-0.5" style="accent-color: var(--ui-accent);" />
-              <span>Deterministic judge (temperature 0)</span>
-            </label>
-          </section>
-          <!-- Web search -->
-          <section>
-            <h3
-              class="font-semibold text-sm mb-3"
-              style="color: var(--ui-text-primary);"
-            >
-              Web search
-            </h3>
-            <div
-              class="flex rounded-lg border overflow-hidden"
-              style="border-color: var(--ui-border);"
-            >
-              <button
-                type="button"
-                class="flex-1 px-2 py-1.5 text-xs font-medium transition-colors"
-                class:opacity-70={$arenaWebSearchMode !== "none"}
-                style="border-color: var(--ui-border); background: {$arenaWebSearchMode ===
-                'none'
-                  ? 'var(--ui-sidebar-active)'
-                  : 'transparent'}; color: {$arenaWebSearchMode === 'none'
-                  ? 'var(--ui-text-primary)'
-                  : 'var(--ui-text-secondary)'}"
-                onclick={() => {
-                  arenaWebSearchMode.set("none");
-                  if ($settings.audio_enabled && $settings.audio_clicks)
-                    playClick($settings.audio_volume);
-                }}>None</button
-              >
-              <button
-                type="button"
-                class="flex-1 px-2 py-1.5 text-xs font-medium transition-colors border-l"
-                class:opacity-70={$arenaWebSearchMode !== "all"}
-                style="border-color: var(--ui-border); background: {$arenaWebSearchMode ===
-                'all'
-                  ? 'var(--ui-sidebar-active)'
-                  : 'transparent'}; color: {$arenaWebSearchMode === 'all'
-                  ? 'var(--ui-text-primary)'
-                  : 'var(--ui-text-secondary)'}"
-                onclick={() => {
-                  arenaWebSearchMode.set("all");
-                  if ($settings.audio_enabled && $settings.audio_clicks)
-                    playClick($settings.audio_volume);
-                }}>All</button
-              >
-            </div>
-          </section>
-          <!-- Scoring model (for automated judging) -->
-          <section>
-            <h3 class="font-semibold text-sm mb-3" style="color: var(--ui-text-primary);">
-              Judge model
-            </h3>
-            <p class="text-xs mb-2" style="color: var(--ui-text-secondary);">
-              Model used to score answers after all contestants finish. Must NOT be a contestant. "Auto" picks the largest non-contestant model available.
-            </p>
-            <select
-              class="w-full px-3 py-2 rounded-lg border text-sm"
-              style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
-              aria-label="Judge model"
-              value={$arenaScoringModelId || "__auto__"}
-              onchange={(e) => {
-                const v = e.currentTarget?.value;
-                arenaScoringModelId.set(v === "__auto__" || !v ? "" : v);
-              }}
-            >
-              <option value="__auto__">Auto (largest non-contestant)</option>
-              {#each $models.filter((m) => {
-                const cIds = [
-                  $dashboardModelA, $dashboardModelB, $dashboardModelC, $dashboardModelD
-                ].map((s) => (s || "").trim().toLowerCase()).filter(Boolean);
-                return !cIds.includes((m.id || "").trim().toLowerCase());
-              }) as m (m.id)}
-                <option value={m.id}>{m.id}</option>
-              {/each}
-            </select>
-          </section>
-          <!-- Score breakdown -->
-          <section>
-            <h3
-              class="font-semibold text-sm mb-3"
-              style="color: var(--ui-text-primary);"
-            >
-              Score breakdown
-            </h3>
-            <ArenaScoreMatrix
-              {scoreHistory}
-              totals={arenaScores}
-              visibleSlots={$arenaPanelCount >= 4
-                ? ["A", "B", "C", "D"]
-                : $arenaPanelCount >= 3
-                  ? ["A", "B", "C"]
-                  : $arenaPanelCount >= 2
-                    ? ["A", "B"]
-                    : ["A"]}
-            />
-          </section>
-          <!-- Actions -->
-          <section>
-            <h3
-              class="font-semibold text-sm mb-3"
-              style="color: var(--ui-text-primary);"
-            >
-              Actions
-            </h3>
-            <p class="text-xs mb-2" style="color: var(--ui-text-secondary);">
-              Reset all scores sets A–D back to 0 so you can start a new
-              competition. You can also use <strong>Reset scores</strong> in the
-              bar above.
-            </p>
-            <div class="flex flex-col gap-2">
-              <button
-                type="button"
-                class="w-full px-3 py-2 rounded-lg text-sm font-medium border"
-                style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-secondary);"
-                onclick={confirmResetScores}
-              >
-                Reset all scores
-              </button>
-              <button
-                type="button"
-                class="w-full px-3 py-2 rounded-lg text-sm font-medium border disabled:opacity-50"
-                style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-secondary);"
-                disabled={ejectBusy}
-                onclick={confirmEjectAll}
-              >
-                {ejectBusy ? "Ejecting…" : "Eject all models"}
-              </button>
-              {#if ejectMessage}
-                <span
-                  class="text-xs"
-                  style="color: var(--atom-teal);"
-                  role="status">{ejectMessage}</span
-                >
-              {/if}
-            </div>
-          </section>
-        </div>
-      </div>
-    </div>
-  {/if}
+  <!-- Old modal settings panel removed: now docked as right sidebar above -->
 </div>
