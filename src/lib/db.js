@@ -65,7 +65,7 @@ export async function listConversations() {
 
 /**
  * @param {string} conversationId
- * @param {{ role: string, content: string|Array, stats?: Object, modelId?: string }} message
+ * @param {{ role: string, content: string|Array, stats?: Object, modelId?: string, imageRefs?: Array<{ image_id: string }>, imageUrls?: string[] }} message
  */
 export async function addMessage(conversationId, message) {
   const id = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -76,6 +76,8 @@ export async function addMessage(conversationId, message) {
     content: message.content,
     stats: message.stats ?? null,
     modelId: message.modelId ?? null,
+    imageRefs: message.imageRefs ?? null,
+    imageUrls: message.imageUrls ?? null,
     createdAt: Date.now(),
   });
   return id;

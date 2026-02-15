@@ -1,8 +1,8 @@
 <script>
   import { get } from 'svelte/store';
-  import { activeConversationId, activeMessages, conversations, settings, effectiveModelId, isStreaming, chatError, chatCommand, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress, webSearchConnected } from '$lib/stores.js';
+  import { activeConversationId, activeMessages, conversations, settings, effectiveModelId, isStreaming, chatError, chatCommand, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress, webSearchConnected, grokApiKey, togetherApiKey } from '$lib/stores.js';
   import { getMessages, addMessage, clearMessages, deleteMessage, getMessageCount } from '$lib/db.js';
-  import { streamChatCompletion } from '$lib/api.js';
+  import { streamChatCompletion, requestGrokImageGeneration, requestTogetherImageGeneration, isGrokModel, isDeepSeekModel } from '$lib/api.js';
   import { searchDuckDuckGo, formatSearchResultForChat } from '$lib/duckduckgo.js';
   import MessageList from '$lib/components/MessageList.svelte';
   import ChatInput from '$lib/components/ChatInput.svelte';
@@ -11,6 +11,35 @@
 
   const convId = $derived($activeConversationId);
   let chatAbortController = $state(null);
+  let imageGenerating = $state(false);
+
+  /** Image options modal (DeepSeek/Together flow): click Image → popup → choose engine, quality, size, n → Generate */
+  /** FLUX.1-schnell is serverless ($0.003/image). No dedicated endpoint needed. */
+  const ENGINE_OPTIONS = [
+    { label: 'FLUX.1-schnell (fastest, good quality)', model: 'black-forest-labs/FLUX.1-schnell' },
+    { label: 'FLUX.1-pro (highest quality, slower)', model: 'black-forest-labs/FLUX.1-pro' },
+    { label: 'Stable Diffusion XL (balanced)', model: 'stabilityai/stable-diffusion-xl-base-1.0' },
+    { label: 'DeepSeek-V3 (via Together)', model: 'deepseek-ai/DeepSeek-V3' },
+  ];
+  const QUALITY_OPTIONS = [
+    { label: 'Draft (fast, 4 steps)', steps: 4 },
+    { label: 'Standard (balanced, 8 steps)', steps: 8 },
+    { label: 'High (best quality, 20+ steps)', steps: 20 },
+  ];
+  const SIZE_OPTIONS = [
+    { label: '512×512', width: 512, height: 512 },
+    { label: '768×768', width: 768, height: 768 },
+    { label: '1024×1024', width: 1024, height: 1024 },
+    { label: '1024×768 (landscape)', width: 1024, height: 768 },
+    { label: '768×1024 (portrait)', width: 768, height: 1024 },
+  ];
+  const N_OPTIONS = [1, 2, 4];
+  let imageModalOpen = $state(false);
+  let imageModalPrompt = $state('');
+  let imageModalEngine = $state(0);
+  let imageModalQuality = $state(0);
+  let imageModalSize = $state(2);
+  let imageModalN = $state(1);
 
   async function loadMessages(id = convId) {
     if (!id) {
@@ -48,8 +77,23 @@
     URL.revokeObjectURL(a.href);
   }
 
+  /** Sanitize content so we never re-send huge base64 images in history (avoids API "data did not match" / oversized body). */
+  function sanitizeContentForApi(content) {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return content;
+    return content.map((part) => {
+      if (part?.type === 'text' && typeof part.text === 'string') return part;
+      if (part?.type === 'image_url') return { type: 'text', text: '[Image attached]' };
+      return part;
+    });
+  }
+
   function buildApiMessages(msgs, systemPrompt) {
-    const out = msgs.map((m) => ({ role: m.role, content: m.content })).filter((m) => {
+    const sanitized = msgs.map((m, i) => ({
+      role: m.role,
+      content: i === msgs.length - 1 ? m.content : sanitizeContentForApi(m.content),
+    }));
+    const out = sanitized.filter((m) => {
       if (m.role === 'system') return true;
       if (typeof m.content === 'string') return m.content.trim().length > 0;
       if (Array.isArray(m.content)) return m.content.length > 0;
@@ -119,11 +163,13 @@
       stats: null,
       modelId: $effectiveModelId,
       createdAt: Date.now(),
+      imageRefs: [],
     };
     activeMessages.update((arr) => [...arr, assistantPlaceholder]);
 
     isStreaming.set(true);
     let fullContent = '';
+    const streamImageRefs = [];
     const controller = new AbortController();
     chatAbortController = controller;
 
@@ -149,9 +195,20 @@
           activeMessages.update((arr) => {
             const out = [...arr];
             const last = out[out.length - 1];
-            if (last && last.role === 'assistant') out[out.length - 1] = { ...last, content: fullContent, modelId: $effectiveModelId };
+            if (last && last.role === 'assistant') out[out.length - 1] = { ...last, content: fullContent, modelId: $effectiveModelId, imageRefs: [...streamImageRefs] };
             return out;
           });
+        },
+        onImageRef(ref) {
+          if (ref?.image_id) {
+            streamImageRefs.push({ image_id: ref.image_id, size: (ref && 'size' in ref ? ref.size : undefined) || 'LARGE' });
+            activeMessages.update((arr) => {
+              const out = [...arr];
+              const last = out[out.length - 1];
+              if (last && last.role === 'assistant') out[out.length - 1] = { ...last, content: fullContent, modelId: $effectiveModelId, imageRefs: [...streamImageRefs] };
+              return out;
+            });
+          }
         },
         onDone() {
           chatAbortController = null;
@@ -184,7 +241,7 @@
             estimated: streamResult?.usage?.completion_tokens == null,
           }
         : null;
-    await addMessage(convId, { role: 'assistant', content: fullContent, modelId: $effectiveModelId, stats });
+    await addMessage(convId, { role: 'assistant', content: fullContent, modelId: $effectiveModelId, stats, imageRefs: streamImageRefs.length ? streamImageRefs : undefined });
     await loadMessages();
 
     const conv = $conversations.find((c) => c.id === convId);
@@ -204,6 +261,106 @@
     await clearMessages(convId);
     await loadMessages();
   }
+
+  /** Grok image only. Separate code path; does not touch DeepSeek. */
+  async function handleGrokImage(prompt) {
+    if (!convId) {
+      chatError.set('Start or select a conversation first.');
+      return;
+    }
+    if (!get(grokApiKey)?.trim()) {
+      chatError.set('Grok API key required. Add it in Settings → Cloud APIs.');
+      return;
+    }
+    chatError.set(null);
+    imageGenerating = true;
+    try {
+      const data = await requestGrokImageGeneration({ prompt, n: 1, aspect_ratio: '1:1', resolution: '1k', response_format: 'url' });
+      const urls = data?.data?.map((d) => d?.url).filter(Boolean) ?? [];
+      if (urls.length === 0) {
+        chatError.set('Image generation failed—no URLs returned. Try text mode.');
+        return;
+      }
+      const modelId = get(effectiveModelId);
+      await addMessage(convId, {
+        role: 'assistant',
+        content: 'Generated images for your prompt.',
+        imageUrls: urls,
+        modelId: modelId || 'grok:grok-imagine-image',
+      });
+      await loadMessages();
+    } catch (err) {
+      chatError.set(err?.message ?? 'Image generation failed—try text mode.');
+    } finally {
+      imageGenerating = false;
+    }
+  }
+
+  /** DeepSeek image flow: open options modal (do not call API yet). Separate code path; does not touch Grok. */
+  function openImageOptionsModal(prompt) {
+    if (!convId) {
+      chatError.set('Start or select a conversation first.');
+      return;
+    }
+    const key = (get(togetherApiKey)?.trim() || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TOGETHER_API_KEY) || '').trim();
+    if (!key) {
+      chatError.set('Together API key required. Set VITE_TOGETHER_API_KEY in .env or add it in Settings → Cloud APIs.');
+      return;
+    }
+    chatError.set(null);
+    imageModalPrompt = (prompt || '').trim() || '';
+    imageModalOpen = true;
+  }
+
+  function closeImageModal() {
+    imageModalOpen = false;
+  }
+
+  /** Step 3: user clicked Generate in modal → call Together API with selected options → display images in chat. */
+  async function handleImageModalGenerate() {
+    if (!convId || !imageModalPrompt.trim()) return;
+    const key = (get(togetherApiKey)?.trim() || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TOGETHER_API_KEY) || '').trim();
+    if (!key) {
+      chatError.set('Together API key required.');
+      return;
+    }
+    const engine = ENGINE_OPTIONS[imageModalEngine];
+    const quality = QUALITY_OPTIONS[imageModalQuality];
+    const size = SIZE_OPTIONS[imageModalSize];
+    const n = N_OPTIONS[imageModalN] ?? 1;
+    const modelForRequest = engine?.model || 'black-forest-labs/FLUX.1-schnell';
+    closeImageModal();
+    imageGenerating = true;
+    chatError.set(null);
+    try {
+      const data = await requestTogetherImageGeneration({
+        prompt: imageModalPrompt,
+        apiKey: key,
+        model: modelForRequest,
+        width: size?.width ?? 1024,
+        height: size?.height ?? 1024,
+        steps: quality?.steps ?? 4,
+        n,
+      });
+      const urls = data?.data?.map((d) => d?.url).filter(Boolean) ?? [];
+      if (urls.length === 0) {
+        chatError.set('Image generation failed—no URLs returned.');
+        return;
+      }
+      const modelId = get(effectiveModelId);
+      await addMessage(convId, {
+        role: 'assistant',
+        content: 'Generated images for your prompt.',
+        imageUrls: urls,
+        modelId: modelId || 'deepseek:deepseek-chat',
+      });
+      await loadMessages();
+    } catch (err) {
+      chatError.set(err?.message ?? 'Image generation failed.');
+    } finally {
+      imageGenerating = false;
+    }
+  }
 </script>
 
 <div
@@ -217,11 +374,103 @@
     if (files?.length) pendingDroppedFiles.set(files);
   }}
 >
+  <!-- Image options modal (DeepSeek/Together flow): engine, quality, size, n → Generate -->
+  {#if imageModalOpen}
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style="background: rgba(0,0,0,0.5);"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="image-modal-title"
+    >
+      <div class="w-full max-w-md rounded-xl shadow-xl p-5 flex flex-col gap-4" style="background: var(--ui-bg-main); border: 1px solid var(--ui-border);">
+        <h2 id="image-modal-title" class="text-lg font-semibold" style="color: var(--ui-text-primary);">Generate image</h2>
+        <div>
+          <label for="image-modal-prompt" class="block text-sm font-medium mb-1" style="color: var(--ui-text-secondary);">Prompt</label>
+          <textarea
+            id="image-modal-prompt"
+            bind:value={imageModalPrompt}
+            rows="3"
+            class="w-full rounded border px-3 py-2 text-sm resize-none"
+            style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
+            placeholder="Describe the image you want"
+          ></textarea>
+        </div>
+        <div>
+          <label for="image-modal-engine" class="block text-sm font-medium mb-1" style="color: var(--ui-text-secondary);">Choose Image Engine</label>
+          <select
+            id="image-modal-engine"
+            bind:value={imageModalEngine}
+            class="w-full rounded border px-3 py-2 text-sm"
+            style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
+          >
+            {#each ENGINE_OPTIONS as opt, i}
+              <option value={i}>{opt.label}</option>
+            {/each}
+          </select>
+        </div>
+        <div>
+          <label for="image-modal-quality" class="block text-sm font-medium mb-1" style="color: var(--ui-text-secondary);">Quality / Steps</label>
+          <select
+            id="image-modal-quality"
+            bind:value={imageModalQuality}
+            class="w-full rounded border px-3 py-2 text-sm"
+            style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
+          >
+            {#each QUALITY_OPTIONS as opt, i}
+              <option value={i}>{opt.label}</option>
+            {/each}
+          </select>
+        </div>
+        <div>
+          <label for="image-modal-size" class="block text-sm font-medium mb-1" style="color: var(--ui-text-secondary);">Size</label>
+          <select
+            id="image-modal-size"
+            bind:value={imageModalSize}
+            class="w-full rounded border px-3 py-2 text-sm"
+            style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
+          >
+            {#each SIZE_OPTIONS as opt, i}
+              <option value={i}>{opt.label}</option>
+            {/each}
+          </select>
+        </div>
+        <div>
+          <label for="image-modal-n" class="block text-sm font-medium mb-1" style="color: var(--ui-text-secondary);">Number of images</label>
+          <select
+            id="image-modal-n"
+            bind:value={imageModalN}
+            class="w-full rounded border px-3 py-2 text-sm"
+            style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
+          >
+            {#each N_OPTIONS as num, i}
+              <option value={i}>{num}</option>
+            {/each}
+          </select>
+        </div>
+        <div class="flex gap-2 justify-end pt-2">
+          <button
+            type="button"
+            class="px-4 py-2 rounded-lg text-sm font-medium"
+            style="background: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary);"
+            onclick={closeImageModal}
+          >Cancel</button>
+          <button
+            type="button"
+            class="px-4 py-2 rounded-lg text-sm font-medium"
+            style="background: var(--ui-accent); color: var(--ui-bg-main);"
+            onclick={handleImageModalGenerate}
+            disabled={imageGenerating || !imageModalPrompt.trim()}
+          >{imageGenerating ? 'Generating…' : 'Generate'}</button>
+        </div>
+      </div>
+    </div>
+  {/if}
   {#if convId}
     {#if $activeMessages.length === 0}
       <!-- Greeting: ATOM branding, headline, gradient divider, input (power-user tone) -->
       <div class="ui-splash-wrap flex-1 flex flex-col items-center justify-center px-4 py-8 min-h-0">
-        <div class="w-full max-w-[min(700px,92%)] mx-auto flex flex-col items-center">
+        <div class="w-full max-w-[min(52rem,92%)] mx-auto flex flex-col items-center">
           <div class="ui-splash-branding flex items-center justify-center gap-2 mb-2" aria-hidden="true"><AtomLogo size={32} /><span>ATOM</span></div>
           <h1 class="ui-greeting-title text-2xl md:text-3xl font-semibold mb-8 text-center" style="color: var(--ui-text-primary);">What can I help with?</h1>
           {#if $chatError}
@@ -230,35 +479,44 @@
               <button type="button" class="shrink-0 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30" onclick={() => chatError.set(null)} aria-label="Dismiss">×</button>
             </div>
           {/if}
-          <div class="ui-splash-divider mb-6 w-full max-w-[min(700px,92%)]" aria-hidden="true"></div>
+          <div class="ui-splash-divider mb-6 w-full max-w-[min(52rem,92%)]" aria-hidden="true"></div>
           <div class="w-full min-w-0">
             <ChatInput
               onSend={sendUserMessage}
               onStop={() => chatAbortController?.abort?.()}
+              onGenerateImageGrok={$effectiveModelId && isGrokModel($effectiveModelId) && $grokApiKey?.trim() ? handleGrokImage : undefined}
+              onGenerateImageDeepSeek={$effectiveModelId && isDeepSeekModel($effectiveModelId) && (($togetherApiKey?.trim()) || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TOGETHER_API_KEY)) ? openImageOptionsModal : undefined}
+              imageGenerating={imageGenerating}
               placeholder="Ask anything. Type or paste here... (Ctrl+Enter to send)"
             />
           </div>
         </div>
       </div>
     {:else}
-      <!-- After first message: messages above, input fixed at bottom -->
+      <!-- After first message: messages above, input fixed at bottom (same width as message list) -->
       <div class="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-zinc-200/60 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/30">
-        <div class="max-w-[min(960px,92%)] mx-auto w-full flex flex-wrap items-center gap-2">
+        <div class="max-w-[min(52rem,92%)] mx-auto w-full flex flex-wrap items-center gap-2">
           <button type="button" class="text-xs px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 transition-colors" onclick={clearChat} title="Clear all messages">Clear</button>
         </div>
       </div>
-      <div class="flex-1 overflow-y-auto">
+      <div class="flex-1 overflow-y-auto min-h-0">
         <MessageList />
       </div>
       <div class="shrink-0 border-t border-zinc-200/60 dark:border-zinc-800/80 p-4" style="background-color: var(--ui-bg-main);">
-        <div class="max-w-[min(960px,92%)] mx-auto w-full">
+        <div class="max-w-[min(52rem,92%)] mx-auto w-full">
           {#if $chatError}
             <div class="mb-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm flex items-center justify-between gap-2">
               <span>{$chatError}</span>
               <button type="button" class="shrink-0 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30" onclick={() => chatError.set(null)} aria-label="Dismiss">×</button>
             </div>
           {/if}
-          <ChatInput onSend={sendUserMessage} onStop={() => chatAbortController?.abort?.()} />
+          <ChatInput
+            onSend={sendUserMessage}
+            onStop={() => chatAbortController?.abort?.()}
+            onGenerateImageGrok={$effectiveModelId && isGrokModel($effectiveModelId) && $grokApiKey?.trim() ? handleGrokImage : undefined}
+            onGenerateImageDeepSeek={$effectiveModelId && isDeepSeekModel($effectiveModelId) && (($togetherApiKey?.trim()) || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TOGETHER_API_KEY)) ? openImageOptionsModal : undefined}
+            imageGenerating={imageGenerating}
+          />
         </div>
       </div>
     {/if}

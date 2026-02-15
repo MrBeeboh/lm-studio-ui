@@ -78,6 +78,7 @@
     normalizeGeneratedQuestionSet,
     makeSeededRandom,
     pickJudgeModel,
+    isCloudModel,
     sanitizeContestantResponse,
     ARENA_CONTESTANT_SYSTEM_PROMPT,
     JUDGE_LOADING_LINES,
@@ -210,8 +211,12 @@
       await new Promise((r) => setTimeout(r, 500));
       buildLoadingMessageIndex = Math.floor(Math.random() * ARENA_BUILD_LOADING_LINES.length);
       arenaTransitionPhase = "loading_judge";
-      await loadModel(judgeId);
-      await new Promise((r) => setTimeout(r, 800));
+      if (!isCloudModel(judgeId)) {
+        await loadModel(judgeId);
+        await new Promise((r) => setTimeout(r, 800));
+      } else {
+        await new Promise((r) => setTimeout(r, 300));
+      }
       let webContext = "";
       if (get(arenaBuilderInternetEnabled)) {
         timestamps.search_start = Date.now();
@@ -272,13 +277,13 @@
         seed: buildSeed,
       };
       questionIndex = 0;
-      if (judgeId) {
+      if (judgeId && !isCloudModel(judgeId)) {
         await unloadModel(judgeId);
         await waitUntilUnloaded([judgeId], { pollIntervalMs: 400, timeoutMs: 15000 }).catch(() => {});
       }
     } catch (e) {
       buildArenaError = e?.message || "Build Arena failed.";
-      if (judgeId) {
+      if (judgeId && !isCloudModel(judgeId)) {
         await unloadModel(judgeId).catch(() => {});
       }
     } finally {
@@ -316,10 +321,15 @@
     arenaWebWarmUpAttempted = true;
     arenaWebWarmingUp = true;
     webSearchConnected.set(false);
-    warmUpSearchConnection().then((ok) => {
-      arenaWebWarmingUp = false;
-      webSearchConnected.set(ok);
-    });
+    warmUpSearchConnection()
+      .then((ok) => {
+        arenaWebWarmingUp = false;
+        webSearchConnected.set(ok);
+      })
+      .catch(() => {
+        arenaWebWarmingUp = false;
+        webSearchConnected.set(false);
+      });
   }
   /** Auto-start warm-up when web search is turned on (uses $store for Svelte 5 reactivity). */
   $effect(() => {
@@ -1463,9 +1473,13 @@
       await new Promise((r) => setTimeout(r, 1000));
       judgeLoadingMessageIndex = getNextWittyJudgeLoading();
       arenaTransitionPhase = "loading_judge";
-      try {
-        await loadModel(judgeId);
-      } catch (_) {}
+      if (!isCloudModel(judgeId)) {
+        try {
+          await loadModel(judgeId);
+        } catch (_) {}
+      } else {
+        await new Promise((r) => setTimeout(r, 200));
+      }
       arenaTransitionPhase = null;
     } finally {
       arenaTransitionPhase = null;
@@ -1637,10 +1651,10 @@
     } finally {
       clearTimeout(judgeTimeoutId);
       aborters["A"] = null;
-      // Unload judge model after scoring (spec: UNLOAD_JUDGE_MODEL → VERIFY_MODEL_UNLOADED)
+      // Unload judge model after scoring (skip for cloud judge — uses no VRAM)
       arenaTransitionPhase = "ejecting";
       try {
-        if (judgeId) {
+        if (judgeId && !isCloudModel(judgeId)) {
           await unloadModel(judgeId);
           await waitUntilUnloaded([judgeId], { pollIntervalMs: 400, timeoutMs: 15000 });
         }

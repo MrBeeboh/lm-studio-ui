@@ -589,7 +589,7 @@ export function buildJudgePrompt({ slotsWithResponses, answerKeyTrimmed, judgeWe
     '',
     ...(precisionNote ? [precisionNote, ''] : []),
     answerKeyTrimmed
-      ? 'BASIS FOR SCORING: An ANSWER KEY is provided below. Use it as the reference for the correct result. Your job is to decide whether each model\'s response is FUNCTIONALLY EQUIVALENT to the answer key—i.e. does it reach the same end result? You may equivocate: different wording, phrasing, or structure is fine as long as the meaning or result is the same. For math, the value or expression should be equivalent; for concepts, the same idea. If a model\'s response contains a line starting with "Final Answer:", use THAT line as the model\'s answer (or the same answer stated elsewhere in the response)—ignore any extra repetition or verbose reasoning above it. If there is no "Final Answer:" line, evaluate the full response.\n\nExamples of equivalences: "3" and "x=3"; "Max Planck" and "Planck" and "Final Answer: Max P" (truncated); "ampere" and "Ampere"; "H2O" and "water". Do NOT require word-for-word match. Do NOT penalize concise or minimal phrasing when the answer is correct. Do NOT give a higher score for repeating the answer, matching the key "in format," or being more verbose—same correct answer must receive the same score (e.g. if two models both give the correct answer, score both in the same band: both 10/10 or both 9/10). Same result = 8-10. Partially same or close = 4-7. Different result = 1-3. No response = 0.'
+      ? 'BASIS FOR SCORING: An ANSWER KEY is provided below. Use it as the reference for the correct result. Your job is to decide whether each model\'s response is FUNCTIONALLY EQUIVALENT to the answer key—i.e. does it reach the same end result? Different wording, phrasing, or structure is fine as long as the meaning or result is the same. For math, the value or expression should be equivalent; for concepts, the same idea. If a model\'s response contains a line starting with "Final Answer:", use THAT line as the model\'s answer (or the same answer stated elsewhere)—ignore any extra reasoning above it. If there is no "Final Answer:" line, evaluate the full response.\n\nExamples of equivalences: "3" and "x=3"; "Max Planck", "Planck" and "Final Answer: Max P"; "ampere" and "Ampere"; "H2O" and "water". Do NOT require word-for-word match. Do NOT penalize concise or minimal phrasing when the answer is correct. Same correct answer = same score band (e.g. both 10/10 or both 9/10).\n\nSCORING BANDS: Same result or same idea as key = 8–10 (do NOT give 1/10 for correct-but-different wording). Partially correct or close = 5–7. Clearly wrong, irrelevant, or no response = 1–3 (0 for no response). Reserve 1/10 only for no response or answers that are plainly wrong—not for answers that are right in substance but phrased differently.'
       : 'BASIS FOR SCORING: No answer key was provided. First use your own knowledge to evaluate correctness. If your own knowledge is not definitive, then use the WEB SEARCH section below (if present) to fact-check. Do not rely on web alone when your knowledge is sufficient. IMPORTANT: If a model\'s response contains a line starting with "Final Answer:", use THAT line as the model\'s answer—ignore any verbose reasoning above it. Do NOT penalize concise phrasing. Same correct answer = same score; do not reward repetition or verbosity. Focus on factual accuracy. Do NOT penalize for formatting, capitalization, phrasing, or omitting variable names (e.g. "3" and "x=3" are the same answer).',
     '',
     `CRITICAL OUTPUT FORMAT: Do NOT output <think> tags, chain-of-thought, reasoning, or any analysis. Do NOT write paragraphs. Your ENTIRE reply must be ONLY the score lines—nothing before them, nothing after. Start your very first character with "Model ${firstSlot}:". Any text before the first "Model" line is a format violation.`,
@@ -614,7 +614,7 @@ export function buildJudgePrompt({ slotsWithResponses, answerKeyTrimmed, judgeWe
   const userContent = parts.join('\n');
 
   const systemWithAnswerKey = answerKeyTrimmed
-    ? `You are a judge. An ANSWER KEY is provided—use it as the reference for the correct result. A response is CORRECT if it is functionally equivalent to the key (same end result), not necessarily word-for-word. Use your judgment to equate different phrasings, formats, or explanations that yield the same result (e.g. "Max Planck", "Planck", or a truncated "Max P" when the key is Max Planck). Do NOT give a higher score for repetition, verbosity, or "matching format"—if two models give the same correct answer, they must receive the same score. Do NOT penalize concise or minimal phrasing. For math, same value or expression; for concepts, same meaning. Score exactly ${competingSlots.length} model(s): ${competingList}. Output exactly one line for each, in that order. No other models. No <think>, no chain-of-thought, no analysis. Start with "Model ${firstSlot}:".`
+    ? `You are a judge. An ANSWER KEY is provided—use it as the reference for the correct result. A response is CORRECT if it is functionally equivalent to the key (same end result), not necessarily word-for-word. Use your judgment to equate different phrasings, formats, or explanations that yield the same result (e.g. "Max Planck", "Planck", or a truncated "Max P" when the key is Max Planck). Do NOT give a higher score for repetition, verbosity, or "matching format"—if two models give the same correct answer, they must receive the same score. Do NOT penalize concise or minimal phrasing. For math, same value or expression; for concepts, same meaning.\n\nCALIBRATION: Reserve 1/10 only for no response, completely wrong, or irrelevant answers. If a response expresses the same idea or condition as the answer key (even in different words or with different structure), score at least 6–10. Do NOT give 1/10 merely because the wording differs from the key. Same substantive answer = 8–10; partial or close = 5–7; wrong or missing = 1–3.\n\nScore exactly ${competingSlots.length} model(s): ${competingList}. Output exactly one line for each, in that order. No other models. No <think>, no chain-of-thought, no analysis. Start with "Model ${firstSlot}:".`
     : null;
 
   const messages = feedback
@@ -681,7 +681,7 @@ export function buildJudgePromptBlind({
     '',
     ...(precisionNoteBlind ? [precisionNoteBlind, ''] : []),
     answerKeyTrimmed
-      ? `BASIS FOR SCORING: An ANSWER KEY is provided—use it as the reference for the correct result. Judge whether each response is FUNCTIONALLY EQUIVALENT (same end result), not word-for-word. Equate "Max Planck", "Planck", or truncated "Max P" when the key is Max Planck. If a response contains "Final Answer:", use that line (or the same answer elsewhere). Do NOT give a higher score for repetition or verbosity; do NOT penalize concise phrasing. Same correct answer = same score band (e.g. both 10/10). Same result = 8-10, partial = 4-7, different result = 1-3, no response = 0.`
+      ? `BASIS FOR SCORING: An ANSWER KEY is provided—use it as the reference for the correct result. Judge whether each response is FUNCTIONALLY EQUIVALENT (same end result), not word-for-word. Equate "Max Planck", "Planck", or truncated "Max P" when the key is Max Planck. If a response contains "Final Answer:", use that line (or the same answer elsewhere). Do NOT give a higher score for repetition or verbosity; do NOT penalize concise phrasing. Same correct answer = same score band.\n\nSCORING BANDS: Same result or same idea as key = 8–10 (do NOT give 1/10 for correct-but-different wording). Partial or close = 5–7. Wrong, irrelevant, or no response = 1–3 (0 for no response). Reserve 1/10 only for no response or plainly wrong answers.`
       : 'BASIS FOR SCORING: No answer key was provided. First use your own knowledge to evaluate correctness. If your own knowledge is not definitive, then use the WEB SEARCH section below (if present) to fact-check. Do not rely on web alone when your knowledge is sufficient. Same correct answer = same score; do not reward verbosity or penalize conciseness. Focus on factual accuracy. Score 0-10 with a brief reason.',
     '',
     'CRITICAL: Your ENTIRE reply must be ONLY the score lines. No <think>, no preamble, no analysis. Start with "Response 1:".',
@@ -702,7 +702,7 @@ export function buildJudgePromptBlind({
   const userContent = parts.join('\n');
 
   const systemContent = answerKeyTrimmed
-    ? `You are a judge. An ANSWER KEY is provided—use it as the reference for the correct result. Score each response 0-10 by whether it is functionally equivalent (same end result) to the key. Equate different phrasings or formats (e.g. "Max Planck", "Planck", truncated "Max P"). Do NOT give a higher score for repetition or verbosity; do NOT penalize concise phrasing. Same correct answer = same score. Consider: ${criteriaLine}. Output ONLY "Response 1: X/10 - reason" through "Response ${n}: X/10 - reason". No other text.`
+    ? `You are a judge. An ANSWER KEY is provided—use it as the reference for the correct result. Score each response 0-10 by whether it is functionally equivalent (same end result) to the key. Equate different phrasings or formats (e.g. "Max Planck", "Planck", truncated "Max P"). Do NOT give a higher score for repetition or verbosity; do NOT penalize concise phrasing. Same correct answer = same score.\n\nCALIBRATION: Reserve 1/10 only for no response or plainly wrong/irrelevant answers. If a response expresses the same idea as the key (even in different words), score at least 6–10. Do NOT give 1/10 for correct-but-different wording. Same substantive answer = 8–10; partial = 5–7; wrong/missing = 1–3. Consider: ${criteriaLine}. Output ONLY "Response 1: X/10 - reason" through "Response ${n}: X/10 - reason". No other text.`
     : `You are a judge. No answer key was provided. First use your own knowledge to evaluate correctness. If your knowledge is not definitive, then use the web search section (if present) to fact-check. Same correct answer = same score; do not reward verbosity or penalize conciseness. Score each response 0-10. Consider: ${criteriaLine}. Output ONLY the Response 1..${n} score lines. No other text.`;
 
   const messages = feedback
@@ -891,25 +891,31 @@ function extractParamSize(id) {
   return m ? parseFloat(m[1]) : 0;
 }
 
+/** True if the model id is a cloud (API) model, e.g. deepseek:deepseek-chat or grok:grok-4. */
+export function isCloudModel(id) {
+  return typeof id === 'string' && id.includes(':');
+}
+
 /**
  * Pick the best judge model from the available model list.
+ * Prefers API (cloud) models so the judge does not use VRAM and is always available.
  *
- * Rules (Sequential Model Arena spec):
+ * Rules:
  *   1. The judge MUST NOT be any of the contestant models.
  *   2. If the user explicitly set a scoring model that isn't a contestant, use it.
- *   3. Otherwise, auto-pick the largest / smartest non-contestant model.
- *   4. Prefer "instruct" models over base models. Prefer larger param counts.
+ *   3. Otherwise, auto-pick: prefer cloud models (DeepSeek, Grok) so judge uses no VRAM; then largest non-contestant local.
+ *   4. For local models: prefer "instruct" and larger param counts.
  *   5. If no non-contestant model is available, return { id: null, error: '...' }.
  *
  * @param {Object} opts
  * @param {string} opts.userChoice - User-configured arenaScoringModelId ('' = auto).
  * @param {string[]} opts.contestantIds - Model IDs currently competing (A–D).
- * @param {Array<{ id: string }>} opts.availableModels - Full model list from LM Studio.
+ * @param {Array<{ id: string }>} opts.availableModels - Full model list (LM Studio + cloud when keys set).
  * @returns {{ id: string|null, error?: string, fallback?: boolean }}
  */
 export function pickJudgeModel({ userChoice, contestantIds, availableModels }) {
   const contestants = new Set((contestantIds || []).map((s) => s.trim().toLowerCase()).filter(Boolean));
-  const isContestant = (id) => contestants.has(id.trim().toLowerCase());
+  const isContestant = (id) => id && contestants.has(String(id).trim().toLowerCase());
 
   // User explicitly chose a model
   if (userChoice && userChoice.trim()) {
@@ -919,24 +925,33 @@ export function pickJudgeModel({ userChoice, contestantIds, availableModels }) {
     // User's choice IS a contestant → fall back to auto-pick
   }
 
-  // Auto-pick: find best non-contestant
   const candidates = (availableModels || [])
     .map((m) => m.id)
     .filter((id) => id && !isContestant(id));
 
   if (candidates.length === 0) {
-    return { id: null, error: 'No non-contestant model available for judging. Load an additional model in LM Studio that is not assigned to any Arena slot.' };
+    return {
+      id: null,
+      error: 'No judge model available. Add a DeepSeek or Grok API key in Settings → Cloud APIs, or load a model in LM Studio that is not assigned to any Arena slot.',
+    };
   }
 
-  // Rank: prefer instruct, prefer larger param count
+  // Prefer cloud (API) models so judge uses no VRAM and is persistent
+  const cloud = candidates.filter((id) => isCloudModel(id));
+  if (cloud.length > 0) {
+    const order = ['deepseek', 'grok'];
+    const preferred = cloud.find((id) => order.some((p) => id.startsWith(p + ':')));
+    return { id: preferred || cloud[0], fallback: true };
+  }
+
+  // Fall back to best local non-contestant
   const scored = candidates.map((id) => {
-    const lower = id.toLowerCase();
+    const lower = String(id).toLowerCase();
     const size = extractParamSize(id);
     const instructBonus = /instruct|chat/.test(lower) ? 100 : 0;
     return { id, score: size + instructBonus };
   });
   scored.sort((a, b) => b.score - a.score);
-
   return { id: scored[0].id, fallback: true };
 }
 

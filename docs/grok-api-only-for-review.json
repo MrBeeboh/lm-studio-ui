@@ -1,0 +1,43 @@
+{
+  "purpose": "Grok integration: real-time web + X search via xAI Responses API. For human or Grok to review.",
+  "current_behavior": "Grok uses Responses API (POST /v1/responses) with tools web_search and x_search; tool_choice: auto. Server runs tools; we parse SSE for response.output_text.delta and completion events.",
+  "provider_config": {
+    "name": "Grok",
+    "baseUrl": "https://api.x.ai/v1",
+    "model_id_format": "grok:grok-4 (UI) → grok-4 (sent to API)",
+    "models": ["grok-3", "grok-3-mini", "grok-4", "grok-4-1-fast-reasoning"],
+    "auth": "Bearer key from localStorage grokApiKey"
+  },
+  "request": {
+    "method": "POST",
+    "url": "https://api.x.ai/v1/responses",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer <grokApiKey>"
+    },
+    "body_shape": {
+      "model": "grok-4",
+      "input": [{"role": "user", "content": "Hello"}],
+      "stream": true,
+      "max_output_tokens": 4096,
+      "temperature": 0.7,
+      "tools": [{"type": "web_search"}, {"type": "x_search"}],
+      "tool_choice": "auto"
+    }
+  },
+  "stream_parsing": {
+    "format": "SSE data: lines with JSON events",
+    "text_from": "response.output_text.delta (event.delta or event.output_text.delta); fallback choices[0].delta.content",
+    "end_conditions": "response.completed, response.output_text.done, response.done, or choices[0].finish_reason"
+  },
+  "non_stream": "Same URL/body with stream: false; content from parseGrokResponseOutput (output[] message content or choices[0].message.content).",
+  "constraints": {
+    "max_output_tokens_range": [1, 8192],
+    "request_timeout_ms": 90000
+  },
+  "review_questions_for_grok": [
+    "Is this Responses API request shape correct for real-time web + X search in Feb 2026?",
+    "Are the SSE event types we parse (response.output_text.delta, response.completed, etc.) the actual ones xAI sends?",
+    "Any required fields or event types we are missing for streaming with tools?"
+  ]
+}

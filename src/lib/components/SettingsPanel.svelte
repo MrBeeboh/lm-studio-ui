@@ -1,7 +1,7 @@
 <script>
   import { fly } from 'svelte/transition';
   import { backOut, quintOut } from 'svelte/easing';
-  import { globalDefault, updateGlobalDefault, selectedModelId, models, presetDefaultModels, lmStudioBaseUrl, voiceServerUrl, lmStudioUnloadHelperUrl } from '$lib/stores.js';
+  import { globalDefault, updateGlobalDefault, selectedModelId, models, presetDefaultModels, lmStudioBaseUrl, voiceServerUrl, lmStudioUnloadHelperUrl, deepSeekApiKey, grokApiKey, togetherApiKey } from '$lib/stores.js';
 
   let { onclose } = $props();
 
@@ -121,6 +121,49 @@
             placeholder="http://localhost:8765"
             class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm font-mono placeholder:text-zinc-400" />
           <p class="text-xs text-zinc-500 dark:text-zinc-400">Run the Python voice server from the <code class="bg-zinc-200 dark:bg-zinc-700 px-1 rounded">voice-server</code> folder (see <code class="bg-zinc-200 dark:bg-zinc-700 px-1 rounded">voice-server/README.md</code>). Leave default to use mic with local server at port 8765.</p>
+        </div>
+      </div>
+
+      <!-- Cloud APIs: DeepSeek + Grok -->
+      <div class="border border-zinc-200 dark:border-zinc-600 rounded-lg overflow-hidden">
+        <div class="px-4 py-3 border-b border-zinc-200 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-800/80">
+          <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Cloud APIs (DeepSeek &amp; Grok)</span>
+        </div>
+        <div class="px-4 py-3 space-y-4">
+          <p class="text-xs text-zinc-500 dark:text-zinc-400">Add API keys to use DeepSeek or Grok models alongside LM Studio. They appear in the model dropdown when set. Keys are stored only in your browser.</p>
+          <div>
+            <label for="settings-deepseek-key" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400">DeepSeek API key</label>
+            <input
+              id="settings-deepseek-key"
+              type="password"
+              autocomplete="off"
+              bind:value={$deepSeekApiKey}
+              placeholder="API key (paste without extra spaces)"
+              class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm font-mono placeholder:text-zinc-400" />
+            <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Get a key at <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer" class="underline">platform.deepseek.com</a>. Models: deepseek-chat, deepseek-reasoner.</p>
+          </div>
+          <div>
+            <label for="settings-grok-key" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400">Grok (xAI) API key</label>
+            <input
+              id="settings-grok-key"
+              type="password"
+              autocomplete="off"
+              bind:value={$grokApiKey}
+              placeholder="xai-…"
+              class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm font-mono placeholder:text-zinc-400" />
+            <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Get a key at <a href="https://console.x.ai" target="_blank" rel="noopener noreferrer" class="underline">console.x.ai</a>. Models: grok-3, grok-3-mini, grok-4, grok-4-1-fast-reasoning.</p>
+          </div>
+          <div>
+            <label for="settings-together-key" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400">Together AI API key (image when DeepSeek)</label>
+            <input
+              id="settings-together-key"
+              type="password"
+              autocomplete="off"
+              bind:value={$togetherApiKey}
+              placeholder="…"
+              class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm font-mono placeholder:text-zinc-400" />
+            <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Used only when DeepSeek is selected and you click Image (separate endpoint; DeepSeek has no native image API). Get a key at <a href="https://api.together.xyz" target="_blank" rel="noopener noreferrer" class="underline">api.together.xyz</a>.</p>
+          </div>
         </div>
       </div>
 

@@ -16,6 +16,7 @@ import {
   computeTotals,
   migrateOldQuestionsAndAnswers,
   pickJudgeModel,
+  isCloudModel,
   sanitizeContestantResponse,
 } from './arenaLogic.js';
 
@@ -709,5 +710,33 @@ describe('pickJudgeModel', () => {
       ],
     });
     expect(result.id).toBe('llama-3.1-8b-instruct');
+  });
+
+  it('prefers cloud (API) judge when available so judge uses no VRAM', () => {
+    const withCloud = [
+      ...allModels,
+      { id: 'grok:grok-4' },
+      { id: 'deepseek:deepseek-chat' },
+    ];
+    const result = pickJudgeModel({
+      userChoice: '',
+      contestantIds: ['qwen3-vl-4b-instruct', 'essentialai/rny-1', 'meta-llama-3.1-8b-instruct', 'zai-org/glm-4.6v-flash'],
+      availableModels: withCloud,
+    });
+    expect(result.fallback).toBe(true);
+    expect(isCloudModel(result.id)).toBe(true);
+    expect(result.id.startsWith('deepseek:') || result.id.startsWith('grok:')).toBe(true);
+  });
+});
+
+describe('isCloudModel', () => {
+  it('returns true for provider:model ids', () => {
+    expect(isCloudModel('deepseek:deepseek-chat')).toBe(true);
+    expect(isCloudModel('grok:grok-4')).toBe(true);
+  });
+  it('returns false for local model ids', () => {
+    expect(isCloudModel('qwen3-32b-instruct')).toBe(false);
+    expect(isCloudModel('')).toBe(false);
+    expect(isCloudModel(null)).toBe(false);
   });
 });

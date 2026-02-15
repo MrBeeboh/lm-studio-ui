@@ -1,0 +1,29 @@
+{
+  "purpose": "Give this entire JSON to Grok. We need these answers to add image search + carousel rendering to our Grok integration.",
+  "our_goal": "Search the web for real images and render them in our UI (carousel). We do NOT need image generation (no DALL·E). Only search + display existing web images.",
+  "our_current_setup": {
+    "endpoint": "POST https://api.x.ai/v1/responses",
+    "tools": [{ "type": "web_search" }, { "type": "x_search" }],
+    "tool_choice": "auto",
+    "we_parse": "Stream text from response.output_text.delta; we do not show tool_calls in the UI."
+  },
+  "questions_we_need_answered": [
+    {
+      "id": "Q1",
+      "question": "How do we get image URLs from the API so we can render them in a carousel? (e.g. a specific tool, a response field, citations, or image_search?)"
+    },
+    {
+      "id": "Q2",
+      "question": "Do we need to add or change any request parameters? (e.g. enable_image_understanding, a different tool type like image_search, or something in the tools array?)"
+    },
+    {
+      "id": "Q3",
+      "question": "What is the exact response shape for image results? (e.g. response.output, citations, server_side_tool_usage, or a dedicated images array with url, title, source?)"
+    },
+    {
+      "id": "Q4",
+      "question": "Is there a minimal request example (curl or JSON body) that returns image URLs we can display in our front-end?"
+    }
+  ],
+  "how_to_reply": "Please answer Q1–Q4 so our developer can implement image search + carousel in one pass. Paste your reply here or in a follow-up."
+}

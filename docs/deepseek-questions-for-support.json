@@ -1,0 +1,60 @@
+{
+  "purpose": "Exact questions to ask DeepSeek (support, docs, or API team) so we can fix our integration when DeepSeek 'does not work' or appears disconnected.",
+  "our_current_setup": {
+    "base_url": "https://api.deepseek.com",
+    "full_chat_url": "https://api.deepseek.com/v1/chat/completions",
+    "auth_header": "Authorization: Bearer <API_KEY>",
+    "stored_key_name": "deepSeekApiKey (in browser localStorage)",
+    "models_we_send": ["deepseek-chat", "deepseek-reasoner"],
+    "request_body": {
+      "model": "deepseek-chat",
+      "messages": [{"role": "user", "content": "Hello"}],
+      "stream": true,
+      "temperature": 0.7,
+      "max_tokens": 4096
+    }
+  },
+  "questions_to_ask_deepseek": [
+    {
+      "id": "Q1",
+      "question": "What is the exact, canonical URL for chat completions (streaming)? Is it https://api.deepseek.com/v1/chat/completions or https://api.deepseek.com/chat/completions? Please give the single recommended URL.",
+      "why": "We use /v1/chat/completions; some docs show /chat/completions. Wrong URL could cause connection or 404."
+    },
+    {
+      "id": "Q2",
+      "question": "For authentication, is the only required header 'Authorization: Bearer <API_KEY>' with no prefix/suffix (e.g. no 'sk-' requirement, no extra headers)? Are there any known issues with keys that have leading/trailing spaces or that were copied from the platform?",
+      "why": "Connection or 'not working' might be auth-related; we need to rule out key format."
+    },
+    {
+      "id": "Q3",
+      "question": "When the API is unreachable or misconfigured from a client (e.g. browser or Node), what do we typically see? (e.g. CORS errors, timeout, 401, 403, 5xx, or no response?) Is there a health or status endpoint we can call to verify 'connection' before sending a chat request?",
+      "why": "Our UI may show 'connected' based on key presence; we need to know how to reliably detect real connectivity."
+    },
+    {
+      "id": "Q4",
+      "question": "Are there region, IP, or network requirements (e.g. only certain countries, or firewall rules) that could cause requests from a desktop app or browser to fail even with a valid key?",
+      "why": "User says they're sure it said connected; failure might be environment-specific."
+    },
+    {
+      "id": "Q5",
+      "question": "For streaming responses, what is the exact response format? (e.g. SSE with 'data: {...}' lines and 'data: [DONE]' at the end, same as OpenAI?) Where do we read the text delta—e.g. choices[0].delta.content? Any difference from OpenAI chat completion streaming?",
+      "why": "If stream format differs, we might never show content or never detect 'done', so it looks like nothing works."
+    },
+    {
+      "id": "Q6",
+      "question": "Are the model identifiers exactly 'deepseek-chat' and 'deepseek-reasoner' (lowercase, with hyphen), or do we need different names (e.g. with version or region)?",
+      "why": "Wrong model id could return 400 or 'model not found'."
+    },
+    {
+      "id": "Q7",
+      "question": "Is there a recommended timeout for chat (streaming) requests? We currently use 90 seconds. Could longer-running reasoning requests need a longer timeout, and if so what is the maximum we should use?",
+      "why": "Timeouts could make it look like DeepSeek 'does not work' if responses are slow."
+    },
+    {
+      "id": "Q8",
+      "question": "If we get a 4xx or 5xx response, what is the exact JSON error shape (e.g. { error: { message, code, type } }) so we can show a clear message to the user?",
+      "why": "We want to display actionable errors (e.g. 'invalid key', 'rate limit') instead of generic failure."
+    }
+  ],
+  "how_to_use": "Copy each 'question' (and optionally 'why') and send to DeepSeek support, docs feedback, or their API team. Paste the answers back into the project so we can fix base URL, auth, streaming parsing, timeouts, or error handling as needed."
+}

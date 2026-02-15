@@ -74,8 +74,8 @@ export const sidebarCollapsed = writable(
   typeof localStorage !== 'undefined' && localStorage.getItem('sidebarCollapsed') === 'true'
 );
 
-/** Cockpit layout: right Intel panel open (toggle with ]). */
-export const cockpitIntelOpen = writable(true);
+/** Cockpit layout: right Intel panel open (toggle with ]). Default closed. */
+export const cockpitIntelOpen = writable(false);
 
 /** Workbench layout: pinned assistant message (markdown string or null). */
 export const pinnedContent = writable(null);
@@ -113,6 +113,40 @@ export const lmStudioUnloadHelperUrl = writable(getStoredUnloadHelperUrl());
 if (typeof localStorage !== 'undefined') {
   lmStudioUnloadHelperUrl.subscribe((v) => localStorage.setItem('lmStudioUnloadHelperUrl', v ?? ''));
 }
+
+/** DeepSeek API key (optional). When set, DeepSeek models appear in the model list and can be used for chat. Stored trimmed to avoid copy-paste spaces. */
+const getStoredDeepSeekApiKey = () => (typeof localStorage !== 'undefined' ? (localStorage.getItem('deepSeekApiKey') ?? '').trim() : null) ?? '';
+export const deepSeekApiKey = writable(getStoredDeepSeekApiKey());
+if (typeof localStorage !== 'undefined') {
+  deepSeekApiKey.subscribe((v) => localStorage.setItem('deepSeekApiKey', (typeof v === 'string' ? v : '').trim()));
+}
+
+/** Grok (xAI) API key (optional). When set, Grok models appear in the model list and can be used for chat. Stored trimmed to avoid copy-paste spaces. */
+const getStoredGrokApiKey = () => (typeof localStorage !== 'undefined' ? (localStorage.getItem('grokApiKey') ?? '').trim() : null) ?? '';
+export const grokApiKey = writable(getStoredGrokApiKey());
+if (typeof localStorage !== 'undefined') {
+  grokApiKey.subscribe((v) => localStorage.setItem('grokApiKey', (typeof v === 'string' ? v : '').trim()));
+}
+
+/** Together AI API key: used only for image generation when DeepSeek is selected (DeepSeek has no native image API). Separate endpoint from Grok. */
+const getStoredTogetherApiKey = () => (typeof localStorage !== 'undefined' ? (localStorage.getItem('togetherApiKey') ?? '').trim() : null) ?? '';
+export const togetherApiKey = writable(getStoredTogetherApiKey());
+if (typeof localStorage !== 'undefined') {
+  togetherApiKey.subscribe((v) => localStorage.setItem('togetherApiKey', (typeof v === 'string' ? v : '').trim()));
+}
+
+/** Together image endpoint name: required for FLUX.1-schnell-Free (create dedicated endpoint at api.together.ai, then paste the endpoint name here). */
+const getStoredTogetherImageEndpoint = () => (typeof localStorage !== 'undefined' ? (localStorage.getItem('togetherImageEndpoint') ?? '').trim() : null) ?? '';
+export const togetherImageEndpoint = writable(getStoredTogetherImageEndpoint());
+if (typeof localStorage !== 'undefined') {
+  togetherImageEndpoint.subscribe((v) => localStorage.setItem('togetherImageEndpoint', (typeof v === 'string' ? v : '').trim()));
+}
+
+/** True when at least one cloud API key (DeepSeek or Grok) is set. Used for status line when LM Studio is down. */
+export const cloudApisAvailable = derived(
+  [deepSeekApiKey, grokApiKey],
+  ([a, b]) => !!(typeof a === 'string' && a.trim()) || !!(typeof b === 'string' && b.trim())
+);
 
 /** Layout: cockpit | arena only (restore point). Old layouts migrate to cockpit. */
 const OLD_TO_NEW_LAYOUT = {

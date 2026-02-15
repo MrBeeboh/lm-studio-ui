@@ -1,16 +1,22 @@
 <script>
   import { tick } from 'svelte';
   import { models, selectedModelId, presetDefaultModels, lmStudioBaseUrl, modelSelectionNotification } from '$lib/stores.js';
-  import { getModels } from '$lib/api.js';
+  import { getModels, modelDisplayName } from '$lib/api.js';
   import { getModelIcon, getQuantization, ensureModelIcons, modelIconOverrides } from '$lib/modelIcons.js';
   import { findSmallestModel } from '$lib/utils/modelSelection.js';
   import ModelCapabilityBadges from '$lib/components/ModelCapabilityBadges.svelte';
   import ThinkingAtom from '$lib/components/ThinkingAtom.svelte';
+  import { COCKPIT_LOADING_MODELS, pickWitty } from '$lib/cockpitCopy.js';
 
   let open = $state(false);
   let loading = $state(false);
   let triggerEl = $state(null);
   let dropdownPlace = $state({ top: 0, left: 0, bottom: 0, width: 200, maxHeight: 420, openUp: false });
+  let loadingMessage = $state('');
+
+  $effect(() => {
+    if (loading) loadingMessage = pickWitty(COCKPIT_LOADING_MODELS);
+  });
 
   $effect(() => {
     if (!open || !triggerEl) return;
@@ -110,11 +116,11 @@
       onclick={toggle}
       onkeydown={(e) => e.key === 'Escape' && (open = false)}
       aria-label="Select model"
-      title={$selectedModelId || 'Select model'}>
+      title={modelDisplayName($selectedModelId) || 'Select model'}>
       {#if $selectedModelId}
         {@const selIcon = getModelIcon($selectedModelId, $modelIconOverrides)}
         <img src={selIcon} alt="" class="w-4 h-4 shrink-0 rounded object-contain" />
-        <span class="truncate font-bold uppercase tracking-tight text-xs">{$selectedModelId}</span>
+        <span class="truncate font-bold uppercase tracking-tight text-xs">{modelDisplayName($selectedModelId)}</span>
         <ModelCapabilityBadges modelId={$selectedModelId} class="ml-0.5" />
       {:else}
         <span class="text-zinc-500 dark:text-zinc-400">Select model</span>
@@ -130,7 +136,7 @@
       {#if loading}
         <div class="px-4 py-3 text-sm flex items-center gap-2" style="color: var(--ui-text-secondary);">
           <ThinkingAtom size={16} />
-          Loading models…
+          {loadingMessage || 'Loading models…'}
         </div>
       {:else if $models.length === 0}
         <div class="px-4 py-3 text-sm" style="color: var(--ui-text-secondary);">No models found. Is LM Studio running?</div>
@@ -145,7 +151,7 @@
           onclick={() => select(m.id)}>
           <img src={icon} alt="" class="w-5 h-5 shrink-0 rounded object-contain" />
           <span class="min-w-0 flex-1 flex items-center gap-1.5">
-            <span class="truncate">{m.id}</span>
+            <span class="truncate">{modelDisplayName(m.id)}</span>
             <ModelCapabilityBadges modelId={m.id} />
           </span>
         </button>

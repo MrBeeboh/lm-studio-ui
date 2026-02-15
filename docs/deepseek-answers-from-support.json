@@ -1,0 +1,50 @@
+{
+  "purpose": "Answers from DeepSeek (support/docs) to our integration questions. Used to verify and fix DeepSeek connection and errors.",
+  "source": "User obtained these answers and shared with the integration; fixes applied in api.js, stores.js, SettingsPanel.svelte.",
+  "Q1_canonical_url": {
+    "question": "What is the exact, canonical URL for chat completions (streaming)?",
+    "answer": "https://api.deepseek.com/v1/chat/completions. The /v1/ prefix is correct. Versionless /chat/completions is not standard.",
+    "applied": "We already use this URL; no change."
+  },
+  "Q2_authentication": {
+    "question": "Authentication requirements?",
+    "answer": "Only header: Authorization: Bearer <API_KEY>. No sk- prefix. Remove leading/trailing spaces when copying.",
+    "applied": "We trim keys when reading from localStorage and when saving (stores.js). Placeholder: 'API key (paste without extra spaces)'."
+  },
+  "Q3_connectivity": {
+    "question": "How to detect connectivity issues?",
+    "answer": "Invalid key → 401. CORS → browser blocks. Timeout → no response. No public health endpoint; best check is a minimal request (max_tokens: 5, stream: false).",
+    "applied": "Error messages improved for 401/429/400; timeout increased to 120s."
+  },
+  "Q4_region": {
+    "question": "Region/IP restrictions?",
+    "answer": "Globally accessible. Corporate/VPN/firewall can block. No IP whitelisting documented.",
+    "applied": "Documentation only; no code change."
+  },
+  "Q5_streaming_format": {
+    "question": "Streaming response format?",
+    "answer": "OpenAI-compatible SSE: data: {...} lines, data: [DONE]. Text from choices[0].delta.content. First chunk may have delta.role; empty delta with finish_reason = completion.",
+    "applied": "We already parse this; no change."
+  },
+  "Q6_model_ids": {
+    "question": "Exact model identifiers?",
+    "answer": "deepseek-chat (DeepSeek-V3), deepseek-reasoner (DeepSeek-R1). Lowercase, hyphen, no version suffix.",
+    "applied": "We already use these; no change."
+  },
+  "Q7_timeout": {
+    "question": "Recommended timeout?",
+    "answer": "90s reasonable; 120s safe max for streaming, especially deepseek-reasoner.",
+    "applied": "CLOUD_REQUEST_TIMEOUT_MS increased from 90000 to 120000 in api.js."
+  },
+  "Q8_error_format": {
+    "question": "Error response JSON shape?",
+    "answer": "OpenAI-style: { error: { message, type, param, code } }. Codes: invalid_api_key, rate_limit_exceeded, model_not_found, context_length_exceeded.",
+    "applied": "parseChatApiError in api.js now handles code === 'invalid_api_key' (401), 'rate_limit_exceeded' (429), 'model_not_found' (400), 'context_length_exceeded' (400) with clear messages."
+  },
+  "summary_of_code_changes": [
+    "api.js: CLOUD_REQUEST_TIMEOUT_MS 90s → 120s",
+    "api.js: parseChatApiError handles invalid_api_key, rate_limit_exceeded, model_not_found, context_length_exceeded",
+    "stores.js: DeepSeek and Grok keys trimmed on load and on save to localStorage",
+    "SettingsPanel.svelte: DeepSeek key placeholder updated (no sk-; note about no spaces)"
+  ]
+}

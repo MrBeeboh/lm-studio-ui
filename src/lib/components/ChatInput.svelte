@@ -2,11 +2,12 @@
   import { get } from 'svelte/store';
   import { isStreaming, voiceServerUrl, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress, webSearchConnected, layout } from '$lib/stores.js';
   import ThinkingAtom from '$lib/components/ThinkingAtom.svelte';
+  import { COCKPIT_SENDING, COCKPIT_SEARCHING, pickWitty } from '$lib/cockpitCopy.js';
   import { warmUpSearchConnection } from '$lib/duckduckgo.js';
   import { pdfToImageDataUrls } from '$lib/pdfToImages.js';
   import { videoToFrames } from '$lib/videoToFrames.js';
 
-  let { onSend, onStop, placeholder: placeholderOverride = undefined } = $props();
+  let { onSend, onStop, onGenerateImageGrok, onGenerateImageDeepSeek, imageGenerating = false, placeholder: placeholderOverride = undefined } = $props();
   const placeholderText = $derived(placeholderOverride ?? 'Type your message or drop/paste images, video, or PDFs... (Ctrl+Enter to send)');
   let text = $state('');
   let textareaEl = $state(null);
@@ -27,15 +28,30 @@
   /** So we only auto-start warm-up once per "web search on"; avoid retry loop when warm-up fails. */
   let webSearchWarmUpAttempted = $state(false);
 
+  /** Witty status lines for send button (set when streaming/searching starts). */
+  let sendingMessage = $state('');
+  let searchingMessage = $state('');
+  $effect(() => {
+    if ($isStreaming) sendingMessage = pickWitty(COCKPIT_SENDING);
+  });
+  $effect(() => {
+    if ($webSearchInProgress) searchingMessage = pickWitty(COCKPIT_SEARCHING);
+  });
+
   /** Start (or retry) web-search warm-up: spin the globe, hit CORS proxy, set green/red dot. */
   function runWarmUp() {
     webSearchWarmUpAttempted = true;
     webSearchWarmingUp = true;
     webSearchConnected.set(false);
-    warmUpSearchConnection().then((ok) => {
-      webSearchWarmingUp = false;
-      webSearchConnected.set(ok);
-    });
+    warmUpSearchConnection()
+      .then((ok) => {
+        webSearchWarmingUp = false;
+        webSearchConnected.set(ok);
+      })
+      .catch(() => {
+        webSearchWarmingUp = false;
+        webSearchConnected.set(false);
+      });
   }
 
   /**
@@ -177,6 +193,18 @@
     }
   }
 
+  function handleImageClick() {
+    const prompt = text.trim();
+    if (!prompt) return;
+    const fn = typeof onGenerateImageGrok === 'function' ? onGenerateImageGrok : (typeof onGenerateImageDeepSeek === 'function' ? onGenerateImageDeepSeek : null);
+    if (fn) {
+      const result = fn(prompt);
+      if (result && typeof result.then === 'function') {
+        result.then(() => { text = ''; }).catch(() => {});
+      }
+    }
+  }
+
   function addImageDataUrls(dataUrls, label) {
     for (const url of dataUrls) {
       attachments = [...attachments, { dataUrl: url, label: label || 'Image' }];
@@ -290,10 +318,19 @@
     }
   }
 
+  /** Perplexity-style: stable height when empty, grow only with content up to max. */
+  const INPUT_HEIGHT_EMPTY = 72;
+  const INPUT_HEIGHT_MAX = 200;
+
   function autoResize() {
     if (!textareaEl) return;
     textareaEl.style.height = 'auto';
-    textareaEl.style.height = Math.min(textareaEl.scrollHeight, 200) + 'px';
+    const contentHeight = textareaEl.scrollHeight;
+    const isEmpty = !text.trim();
+    const targetHeight = isEmpty
+      ? INPUT_HEIGHT_EMPTY
+      : Math.min(Math.max(contentHeight, INPUT_HEIGHT_EMPTY), INPUT_HEIGHT_MAX);
+    textareaEl.style.height = targetHeight + 'px';
   }
 
   $effect(() => {
@@ -530,22 +567,47 @@
   {#if $isStreaming && onStop}
     <button type="button" class="send-button" style="background: var(--ui-accent-hot, #dc2626);" onclick={() => onStop()} title="Stop">Stop</button>
   {:else}
+    {#if onGenerateImageGrok || onGenerateImageDeepSeek}
+      <button
+        type="button"
+        class="image-gen-button"
+        disabled={$isStreaming || imageGenerating || !text.trim()}
+        onclick={handleImageClick}
+        title={onGenerateImageGrok ? 'Generate image (Grok)' : 'Generate image (DeepSeek / Together)'}
+      >
+        {#if imageGenerating}
+          <span class="image-gen-button-inner"><ThinkingAtom size={14} />Generating…</span>
+        {:else}
+          <span class="image-gen-button-inner">
+            {#if onGenerateImageGrok}
+              <img src="/model-icons/grok-ai-icon.webp" alt="Grok" class="image-gen-icon" aria-hidden="true" />
+            {:else}
+              <img src="/model-icons/deepseek-color.svg" alt="DeepSeek" class="image-gen-icon" aria-hidden="true" />
+            {/if}
+            Image
+          </span>
+        {/if}
+      </button>
+    {/if}
     <button
       onclick={handleSubmit}
       disabled={($isStreaming || $webSearchInProgress || (!text.trim() && attachments.length === 0)) ? true : null}
       class="send-button"
     >
       {#if $webSearchInProgress}
-        <span class="inline-flex items-center gap-1.5"><ThinkingAtom size={16} />Searching…</span>
+        <span class="inline-flex items-center gap-1.5"><ThinkingAtom size={16} />{searchingMessage || 'Searching…'}</span>
       {:else if $isStreaming}
-        <span class="inline-flex items-center gap-1.5"><ThinkingAtom size={16} />Sending...</span>
+        <span class="inline-flex items-center gap-1.5"><ThinkingAtom size={16} />{sendingMessage || 'Sending…'}</span>
       {:else}
         Send
       {/if}
     </button>
   {/if}
   {#if recording}
-    <span class="voice-recording-hint">Recording – click mic to stop</span>
+    <span class="voice-recording-hint" aria-live="polite">
+      <span class="recording-dot" aria-hidden="true"></span>
+      Recording – click mic to stop
+    </span>
   {/if}
   {#if voiceError}
     <p class="voice-error" role="alert">{voiceError}</p>
@@ -567,6 +629,7 @@
   .chat-input-container > .attach-button-wrap,
   .chat-input-container > .mic-button,
   .chat-input-container > .web-search-button,
+  .chat-input-container > .image-gen-button,
   .chat-input-container > .send-button {
     flex-shrink: 0;
     height: 44px;
@@ -582,7 +645,7 @@
     font-family: inherit;
     font-size: 14px;
     resize: none;
-    min-height: 60px;
+    min-height: 72px;
     max-height: 200px;
     overflow-y: auto;
     background-color: var(--ui-input-bg, #fff);
@@ -620,6 +683,40 @@
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
+  }
+
+  .image-gen-button {
+    padding: 12px 20px;
+    min-height: 44px;
+    background: var(--ui-input-bg, #fff);
+    color: var(--ui-text-primary, #111);
+    border: 2px solid var(--ui-border, #e5e7eb);
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 150ms, background 150ms;
+  }
+
+  .image-gen-button-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .image-gen-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  .image-gen-button:hover:not(:disabled) {
+    border-color: var(--ui-accent, #3b82f6);
+    background: color-mix(in srgb, var(--ui-accent, #3b82f6) 8%, var(--ui-input-bg, #fff));
+  }
+
+  .image-gen-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .mic-button {
@@ -663,9 +760,28 @@
     to { transform: rotate(360deg); }
   }
   .voice-recording-hint {
-    font-size: 12px;
-    color: var(--ui-text-secondary, #6b7280);
-    align-self: center;
+    position: absolute;
+    bottom: 100%;
+    left: 16px;
+    margin-bottom: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ui-accent, #3b82f6);
+    pointer-events: none;
+  }
+  .recording-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ui-accent-hot, #ef4444);
+    animation: recording-pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes recording-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.2); }
   }
   .voice-error,
   .attach-error {

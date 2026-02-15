@@ -17,8 +17,8 @@
   $: msgs, scrollToBottom();
 </script>
 
-<div class="max-w-[min(960px,92%)] mx-auto py-4 px-3 w-full" bind:this={listEl}>
-  <div class="space-y-4">
+<div class="chat-message-list max-w-[min(52rem,92%)] mx-auto py-5 px-4 w-full" bind:this={listEl}>
+  <div class="space-y-5">
     {#each msgs as msg (msg.id)}
       <div class="message-entrance">
         <MessageBubble message={msg} />

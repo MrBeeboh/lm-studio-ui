@@ -3,7 +3,7 @@
   import { get } from 'svelte/store';
   import { fly } from 'svelte/transition';
   import { backOut, quintOut } from 'svelte/easing';
-  import { theme, sidebarOpen, settingsOpen, layout, dashboardModelA, dashboardModelB, dashboardModelC, dashboardModelD, activeConversationId, conversations, selectedModelId, uiTheme, sidebarCollapsed, cockpitIntelOpen, arenaPanelCount, models, lmStudioConnected } from '$lib/stores.js';
+  import { theme, sidebarOpen, settingsOpen, layout, dashboardModelA, dashboardModelB, dashboardModelC, dashboardModelD, activeConversationId, conversations, selectedModelId, uiTheme, sidebarCollapsed, cockpitIntelOpen, arenaPanelCount, models, lmStudioConnected, cloudApisAvailable } from '$lib/stores.js';
   import { createConversation, listConversations, getMessageCount, getMessages } from '$lib/db.js';
   import { getModels } from '$lib/api.js';
   import Sidebar from '$lib/components/Sidebar.svelte';
@@ -22,6 +22,7 @@
   import ShortcutsModal from '$lib/components/ShortcutsModal.svelte';
   import AtomLogo from '$lib/components/AtomLogo.svelte';
   import { checkLmStudioConnection } from '$lib/api.js';
+  import { COCKPIT_LM_CHECKING, COCKPIT_LM_CONNECTED, COCKPIT_LM_UNREACHABLE, COCKPIT_CLOUD_APIS_AVAILABLE, pickWitty } from '$lib/cockpitCopy.js';
 
   const LAYOUT_OPTS = [
     { value: 'cockpit', label: 'Cockpit' },
@@ -33,6 +34,17 @@
   const HEADER_GROUP_GAP = 'gap: 0.75rem;';
   const HEADER_BETWEEN_GROUPS = '1.25rem';
   const HEADER_RIGHT_GROUP = 'margin-left: auto;';
+
+  /** Witty LM Studio / cloud status line; updates when connection state changes. */
+  let lmStatusMessage = $state('');
+  $effect(() => {
+    const c = $lmStudioConnected;
+    const cloud = $cloudApisAvailable;
+    if (c === true) lmStatusMessage = pickWitty(COCKPIT_LM_CONNECTED);
+    else if (c === false && cloud) lmStatusMessage = pickWitty(COCKPIT_CLOUD_APIS_AVAILABLE);
+    else if (c === false) lmStatusMessage = pickWitty(COCKPIT_LM_UNREACHABLE);
+    else lmStatusMessage = pickWitty(COCKPIT_LM_CHECKING);
+  });
 
   onMount(() => {
     function applyTheme(want) {
@@ -135,29 +147,39 @@
 
   {#if $layout === 'cockpit'}
     <div class="flex h-full flex-col">
-      <header class="shrink-0 flex items-center flex-wrap px-3 py-2 border-b text-sm" style="border-color: var(--ui-border); background-color: var(--ui-bg-sidebar); color: var(--ui-text-secondary); gap: {HEADER_BETWEEN_GROUPS};">
-        <div class="flex items-center shrink-0" style="{HEADER_GROUP_GAP}" role="group" aria-label="Brand and layout">
-          <span class="flex items-center gap-1.5 font-semibold shrink-0" style="color: var(--ui-accent);"><AtomLogo size={20} />ATOM</span>
-          <nav class="flex items-center gap-0.5 shrink-0" aria-label="Layout">
-            {#each LAYOUT_OPTS as opt}
-              <button type="button" class="px-2 py-1 rounded text-xs {$layout === opt.value ? 'font-medium' : ''}" style="color: {$layout === opt.value ? 'var(--ui-accent)' : 'var(--ui-text-secondary)'}; background: {$layout === opt.value ? 'color-mix(in srgb, var(--ui-accent) 15%, transparent)' : 'transparent'};" onclick={() => layout.set(opt.value)}>{opt.label}</button>
-            {/each}
-          </nav>
+      <!-- Cockpit header: symmetrical two-column layout (left and right equal weight) -->
+      <header class="cockpit-header shrink-0 flex items-center px-4 py-2.5 border-b" style="border-color: var(--ui-border); background-color: var(--ui-bg-sidebar);">
+        <div class="cockpit-header-half flex-1 flex items-center gap-4 min-w-0 justify-start">
+          <div class="cockpit-header-group flex items-center gap-2 shrink-0 rounded-lg pl-2.5 pr-2.5 py-1.5" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent);" role="group" aria-label="Brand and layout">
+            <span class="flex items-center gap-1.5 font-semibold shrink-0" style="color: var(--ui-accent);"><AtomLogo size={20} />ATOM</span>
+            <span class="text-xs font-semibold uppercase tracking-wider shrink-0" style="color: var(--ui-text-secondary);">Layout</span>
+            <nav class="flex items-center gap-0.5 shrink-0" aria-label="Layout">
+              {#each LAYOUT_OPTS as opt}
+                <button type="button" class="cockpit-header-btn h-8 px-2.5 rounded-md text-xs font-semibold shrink-0 transition-opacity hover:opacity-90" style="border: 1px solid {$layout === opt.value ? 'var(--ui-accent)' : 'var(--ui-border)'}; background: {$layout === opt.value ? 'color-mix(in srgb, var(--ui-accent) 14%, transparent)' : 'var(--ui-input-bg)'}; color: {$layout === opt.value ? 'var(--ui-accent)' : 'var(--ui-text-primary)'};" onclick={() => layout.set(opt.value)}>{opt.label}</button>
+              {/each}
+            </nav>
+          </div>
+          <span class="w-px h-6 rounded-full shrink-0" style="background: var(--ui-border);" aria-hidden="true"></span>
+          <div class="cockpit-header-group flex items-center gap-2 shrink-0 rounded-lg pl-2.5 pr-2.5 py-1.5 overflow-hidden" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent);" role="group" aria-label="Model and preset">
+            <span class="text-xs font-semibold uppercase tracking-wider shrink-0" style="color: var(--ui-text-secondary);">Model</span>
+            <div class="shrink-0 overflow-hidden min-w-0" style="{HEADER_MODEL_MIN}"><ModelSelector /></div>
+            <div class="shrink-0" style="{HEADER_PRESET_MIN}"><PresetSelect compact={true} /></div>
+          </div>
         </div>
-        <div class="flex items-center shrink-0 overflow-hidden" style="{HEADER_GROUP_GAP}" role="group" aria-label="Model and preset">
-          <div class="shrink-0 overflow-hidden" style="{HEADER_MODEL_MIN}"><ModelSelector /></div>
-          <div class="shrink-0" style="{HEADER_PRESET_MIN}"><PresetSelect compact={true} /></div>
-        </div>
-        <div class="flex items-center shrink-0 pl-2 border-l" style="border-color: var(--ui-border); {HEADER_GROUP_GAP} {HEADER_THEME_MIN}" role="group" aria-label="Appearance">
-          <UiThemeSelect compact={true} />
-          <ThemeToggle />
-        </div>
-        <div class="flex-1 min-w-4 shrink" aria-hidden="true"></div>
-        <div class="flex items-center shrink-0" style="{HEADER_GROUP_GAP} {HEADER_RIGHT_GROUP}" role="group" aria-label="Status">
-          <span class="flex items-center gap-1.5 shrink-0 text-xs" style="color: var(--ui-text-secondary);" title={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking...'} aria-label={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking connection'}>
-            <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? '#ef4444' : '#94a3b8'};" aria-hidden="true"></span>
-            <span class="hidden sm:inline">LM Studio</span>
-          </span>
+        <div class="cockpit-header-half flex-1 flex items-center gap-4 min-w-0 justify-end">
+          <div class="cockpit-header-group flex items-center gap-2 shrink-0 rounded-lg pl-2.5 pr-2.5 py-1.5" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent); {HEADER_THEME_MIN}" role="group" aria-label="Appearance">
+            <span class="text-xs font-semibold uppercase tracking-wider shrink-0" style="color: var(--ui-text-secondary);">Appearance</span>
+            <UiThemeSelect compact={true} />
+            <ThemeToggle />
+          </div>
+          <span class="w-px h-6 rounded-full shrink-0" style="background: var(--ui-border);" aria-hidden="true"></span>
+          <div class="cockpit-header-group flex items-center gap-2 shrink-0 rounded-lg pl-2.5 pr-2.5 py-1.5" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent);" role="group" aria-label="Status">
+            <span class="text-xs font-semibold uppercase tracking-wider shrink-0" style="color: var(--ui-text-secondary);">Status</span>
+            <span class="flex items-center gap-1.5 shrink-0 text-xs" style="color: var(--ui-text-primary);" title={lmStatusMessage} aria-label={lmStatusMessage}>
+              <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? ($cloudApisAvailable ? '#3b82f6' : '#ef4444') : '#94a3b8'};" aria-hidden="true"></span>
+              <span class="hidden sm:inline">{lmStatusMessage}</span>
+            </span>
+          </div>
         </div>
       </header>
       <div class="flex flex-1 min-h-0 min-w-0 relative">
@@ -232,9 +254,9 @@
         </div>
         <div class="flex-1 min-w-4 shrink" aria-hidden="true"></div>
         <div class="flex items-center shrink-0" style="{HEADER_GROUP_GAP} {HEADER_RIGHT_GROUP}" role="group" aria-label="Status">
-          <span class="flex items-center gap-1.5 shrink-0 text-xs" style="color: var(--ui-text-secondary);" title={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking...'} aria-label={$lmStudioConnected === true ? 'LM Studio connected' : $lmStudioConnected === false ? 'LM Studio not reachable' : 'Checking connection'}>
+          <span class="flex items-center gap-1.5 shrink-0 text-xs" style="color: var(--ui-text-secondary);" title={lmStatusMessage} aria-label={lmStatusMessage}>
             <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? '#ef4444' : '#94a3b8'};" aria-hidden="true"></span>
-            <span class="hidden sm:inline">LM Studio</span>
+            <span class="hidden sm:inline">{lmStatusMessage}</span>
           </span>
         </div>
       </header>

@@ -1,0 +1,44 @@
+{
+  "purpose": "Fix Grok API image search & carousel rendering in our custom LM Studio UI (Feb 14, 2026). DeepSeek falls back to text suggestions; Grok should render real web-sourced images via internal search when tool enabled.",
+  "current_problem": "Grok responds with 'I cannot display or generate actual images' and suggests Google/Images searches. No render tags appear in deltas. Images work in official Grok web/app via render_searched_image components.",
+  "required_fixes": {
+    "request_changes": {
+      "endpoint": "POST https://api.x.ai/v1/responses (already correct)",
+      "add_to_tools_array": {
+        "description": "Add this exact object to enable image search (built-in server-side tool, not documented everywhere but required for render capability)",
+        "value": { "type": "search_images" }
+      },
+      "recommended_additional_params": [
+        { "key": "enable_image_understanding", "value": true, "note": "Enables view_image tool for analysis during search → increases render frequency" }
+      ],
+      "minimal_updated_tools": [
+        { "type": "web_search" },
+        { "type": "x_search" },
+        { "type": "search_images" }
+      ]
+    },
+    "streaming_parser_changes": {
+      "what_to_detect_in_deltas": "Look for embedded render components in response.output_text.delta chunks",
+      "expected_tag_format": "<render_searched_image image_id=\"...\" size=\"SMALL|LARGE\" ... />",
+      "parsing_steps": [
+        "1. Scan each delta text chunk for substrings matching tag (case-sensitive, may have slight whitespace variation)",
+        "2. Extract image_id (integer) and size (SMALL or LARGE)",
+        "3. Replace the entire tag with your UI carousel image element",
+        "4. Fetch/render the image using image_id (likely from xAI CDN: https://cdn.x.ai/images?id={image_id}&size={size} or similar — test by logging full delta on success)",
+        "5. If multiple consecutive tags appear in stream → display as horizontal/vertical carousel (stack them)",
+        "6. If no tag in deltas → no render triggered (model didn't choose to search images)"
+      ],
+      "fallback_if_no_tag": "Log raw delta for debugging; prompt more explicitly (e.g. 'render large photos of...')"
+    },
+    "test_after_fix": {
+      "prompt": "Show me large pictures of the Numerica Skate Ribbon lit up at night in Spokane Valley during Valentine's Day",
+      "expected_behavior": "Grok uses search_images internally → deltas contain one or more tags → UI displays carousel of real web images (no text fallback about 'cannot display images')"
+    },
+    "notes_from_Grok": {
+      "image_generation": "Separate endpoint (/v1/images/generations) with model grok-imagine-image — not part of /v1/responses chat flow",
+      "image_display": "Server-side search + render only (no direct URLs returned in JSON fields; embedded in stream markup)",
+      "why_not_working_now": "Missing 'search_images' tool in tools array → Grok defaults to text-only fallback"
+    },
+    "action_for_cursor": "Implement the above changes in one pass: add {type: 'search_images'} to tools, set enable_image_understanding: true, update delta parser to detect/extract/replace render_searched_image tags with image components (use image_id for rendering). Test with the prompt above and confirm carousel appears. If tags present but no image loads → share raw delta sample for CDN URL guess."
+  }
+}

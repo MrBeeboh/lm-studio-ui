@@ -1,10 +1,11 @@
 <script>
   import { tick } from 'svelte';
   import { models, dashboardModelA, dashboardModelB, dashboardModelC, dashboardModelD, lmStudioBaseUrl } from '$lib/stores.js';
-  import { getModels } from '$lib/api.js';
+  import { getModels, modelDisplayName } from '$lib/api.js';
   import { getModelIcon, getQuantization, ensureModelIcons, modelIconOverrides } from '$lib/modelIcons.js';
   import ModelCapabilityBadges from '$lib/components/ModelCapabilityBadges.svelte';
   import ThinkingAtom from '$lib/components/ThinkingAtom.svelte';
+  import { COCKPIT_LOADING_MODELS, pickWitty } from '$lib/cockpitCopy.js';
 
   let { slot = 'A' } = $props();
   let open = $state(false);
@@ -12,6 +13,11 @@
   let loadError = $state(null);
   let triggerEl = $state(null);
   let dropdownPlace = $state({ top: 0, left: 0, width: 200, maxHeight: 420, openUp: false, bottom: 0 });
+  let loadingMessage = $state('');
+
+  $effect(() => {
+    if (loading) loadingMessage = pickWitty(COCKPIT_LOADING_MODELS);
+  });
 
   $effect(() => {
     if (!open || !triggerEl) return;
@@ -86,7 +92,7 @@
         {#if val}
           {@const selIcon = getModelIcon(val, $modelIconOverrides)}
           {#if selIcon}<img src={selIcon} alt="" class="w-4 h-4 shrink-0 rounded object-contain" />{/if}
-          <span class="truncate font-bold uppercase tracking-tight text-xs">{val}</span>
+          <span class="truncate font-bold uppercase tracking-tight text-xs">{modelDisplayName(val)}</span>
           <ModelCapabilityBadges modelId={val} class="ml-0.5" />
         {:else}<span class="text-zinc-500 dark:text-zinc-400">Select model</span>{/if}
         <svg class="w-4 h-4 shrink-0 ml-1 transition-transform duration-150 {open ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
@@ -94,7 +100,7 @@
       {#if open}
         <div id="model-listbox-A" class="fixed z-[100] rounded-xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg py-1 overflow-y-auto overflow-x-visible min-w-[280px]" style="left: {dropdownPlace.left}px; width: {dropdownPlace.width}px; max-height: {dropdownPlace.maxHeight}px; {dropdownPlace.openUp ? 'bottom: ' + dropdownPlace.bottom + 'px; top: auto;' : 'top: ' + dropdownPlace.top + 'px;'}" role="listbox">
           {#if loading}
-            <div class="px-4 py-3 text-sm flex items-center gap-2 text-zinc-500 dark:text-zinc-400"><ThinkingAtom size={16} />Loading models…</div>
+            <div class="px-4 py-3 text-sm flex items-center gap-2 text-zinc-500 dark:text-zinc-400"><ThinkingAtom size={16} />{loadingMessage || 'Loading models…'}</div>
           {:else if $models.length === 0}
             <div class="px-4 py-3 text-sm">
               <p class="text-zinc-600 dark:text-zinc-400 mb-2">No models found. Is LM Studio running on port 1234? Have you downloaded any models?</p>
@@ -107,7 +113,7 @@
               <button type="button" class="flex items-center gap-2 w-full px-4 py-2.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors {val === m.id ? 'bg-zinc-50 dark:bg-zinc-700/50 font-medium' : ''}" role="option" aria-selected={val === m.id} onclick={() => select(m.id)}>
                 <img src={icon} alt="" class="w-5 h-5 shrink-0 rounded object-contain" />
                 <span class="min-w-0 flex-1 flex items-center gap-1.5">
-                  <span class="truncate">{m.id}</span>
+                  <span class="truncate">{modelDisplayName(m.id)}</span>
                   <ModelCapabilityBadges modelId={m.id} />
                 </span>
               </button>
@@ -127,7 +133,7 @@
         {#if val}
           {@const selIcon = getModelIcon(val, $modelIconOverrides)}
           {#if selIcon}<img src={selIcon} alt="" class="w-4 h-4 shrink-0 rounded object-contain" />{/if}
-          <span class="truncate font-bold uppercase tracking-tight text-xs">{val}</span>
+          <span class="truncate font-bold uppercase tracking-tight text-xs">{modelDisplayName(val)}</span>
           <ModelCapabilityBadges modelId={val} class="ml-0.5" />
         {:else}<span class="text-zinc-500 dark:text-zinc-400">Select model</span>{/if}
         <svg class="w-4 h-4 shrink-0 ml-1 transition-transform duration-150 {open ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
@@ -135,7 +141,7 @@
       {#if open}
         <div id="model-listbox-B" class="fixed z-[100] rounded-xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg py-1 overflow-y-auto overflow-x-visible min-w-[280px]" style="left: {dropdownPlace.left}px; width: {dropdownPlace.width}px; max-height: {dropdownPlace.maxHeight}px; {dropdownPlace.openUp ? 'bottom: ' + dropdownPlace.bottom + 'px; top: auto;' : 'top: ' + dropdownPlace.top + 'px;'}" role="listbox">
           {#if loading}
-            <div class="px-4 py-3 text-sm flex items-center gap-2 text-zinc-500 dark:text-zinc-400"><ThinkingAtom size={16} />Loading models…</div>
+            <div class="px-4 py-3 text-sm flex items-center gap-2 text-zinc-500 dark:text-zinc-400"><ThinkingAtom size={16} />{loadingMessage || 'Loading models…'}</div>
           {:else if $models.length === 0}
             <div class="px-4 py-3 text-sm">
               <p class="text-zinc-600 dark:text-zinc-400 mb-2">No models found. Is LM Studio running on port 1234? Have you downloaded any models?</p>
@@ -148,7 +154,7 @@
               <button type="button" class="flex items-center gap-2 w-full px-4 py-2.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors {val === m.id ? 'bg-zinc-50 dark:bg-zinc-700/50 font-medium' : ''}" role="option" aria-selected={val === m.id} onclick={() => select(m.id)}>
                 <img src={icon} alt="" class="w-5 h-5 shrink-0 rounded object-contain" />
                 <span class="min-w-0 flex-1 flex items-center gap-1.5">
-                  <span class="truncate">{m.id}</span>
+                  <span class="truncate">{modelDisplayName(m.id)}</span>
                   <ModelCapabilityBadges modelId={m.id} />
                 </span>
               </button>
@@ -168,7 +174,7 @@
         {#if val}
           {@const selIcon = getModelIcon(val, $modelIconOverrides)}
           {#if selIcon}<img src={selIcon} alt="" class="w-4 h-4 shrink-0 rounded object-contain" />{/if}
-          <span class="truncate font-bold uppercase tracking-tight text-xs">{val}</span>
+          <span class="truncate font-bold uppercase tracking-tight text-xs">{modelDisplayName(val)}</span>
           <ModelCapabilityBadges modelId={val} class="ml-0.5" />
         {:else}<span class="text-zinc-500 dark:text-zinc-400">Select model</span>{/if}
         <svg class="w-4 h-4 shrink-0 ml-1 transition-transform duration-150 {open ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
@@ -176,7 +182,7 @@
       {#if open}
         <div id="model-listbox-C" class="fixed z-[100] rounded-xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg py-1 overflow-y-auto overflow-x-visible min-w-[280px]" style="left: {dropdownPlace.left}px; width: {dropdownPlace.width}px; max-height: {dropdownPlace.maxHeight}px; {dropdownPlace.openUp ? 'bottom: ' + dropdownPlace.bottom + 'px; top: auto;' : 'top: ' + dropdownPlace.top + 'px;'}" role="listbox">
           {#if loading}
-            <div class="px-4 py-3 text-sm flex items-center gap-2 text-zinc-500 dark:text-zinc-400"><ThinkingAtom size={16} />Loading models…</div>
+            <div class="px-4 py-3 text-sm flex items-center gap-2 text-zinc-500 dark:text-zinc-400"><ThinkingAtom size={16} />{loadingMessage || 'Loading models…'}</div>
           {:else if $models.length === 0}
             <div class="px-4 py-3 text-sm">
               <p class="text-zinc-600 dark:text-zinc-400 mb-2">No models found. Is LM Studio running on port 1234? Have you downloaded any models?</p>
@@ -189,7 +195,7 @@
               <button type="button" class="flex items-center gap-2 w-full px-4 py-2.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors {val === m.id ? 'bg-zinc-50 dark:bg-zinc-700/50 font-medium' : ''}" role="option" aria-selected={val === m.id} onclick={() => select(m.id)}>
                 <img src={icon} alt="" class="w-5 h-5 shrink-0 rounded object-contain" />
                 <span class="min-w-0 flex-1 flex items-center gap-1.5">
-                  <span class="truncate">{m.id}</span>
+                  <span class="truncate">{modelDisplayName(m.id)}</span>
                   <ModelCapabilityBadges modelId={m.id} />
                 </span>
               </button>
@@ -209,7 +215,7 @@
         {#if val}
           {@const selIcon = getModelIcon(val, $modelIconOverrides)}
           {#if selIcon}<img src={selIcon} alt="" class="w-4 h-4 shrink-0 rounded object-contain" />{/if}
-          <span class="truncate font-bold uppercase tracking-tight text-xs">{val}</span>
+          <span class="truncate font-bold uppercase tracking-tight text-xs">{modelDisplayName(val)}</span>
           <ModelCapabilityBadges modelId={val} class="ml-0.5" />
         {:else}<span class="text-zinc-500 dark:text-zinc-400">Select model</span>{/if}
         <svg class="w-4 h-4 shrink-0 ml-1 transition-transform duration-150 {open ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
@@ -217,7 +223,7 @@
       {#if open}
         <div id="model-listbox-D" class="fixed z-[100] rounded-xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg py-1 overflow-y-auto overflow-x-visible min-w-[280px]" style="left: {dropdownPlace.left}px; width: {dropdownPlace.width}px; max-height: {dropdownPlace.maxHeight}px; {dropdownPlace.openUp ? 'bottom: ' + dropdownPlace.bottom + 'px; top: auto;' : 'top: ' + dropdownPlace.top + 'px;'}" role="listbox">
           {#if loading}
-            <div class="px-4 py-3 text-sm flex items-center gap-2 text-zinc-500 dark:text-zinc-400"><ThinkingAtom size={16} />Loading models…</div>
+            <div class="px-4 py-3 text-sm flex items-center gap-2 text-zinc-500 dark:text-zinc-400"><ThinkingAtom size={16} />{loadingMessage || 'Loading models…'}</div>
           {:else if $models.length === 0}
             <div class="px-4 py-3 text-sm">
               <p class="text-zinc-600 dark:text-zinc-400 mb-2">No models found. Is LM Studio running on port 1234? Have you downloaded any models?</p>
@@ -230,7 +236,7 @@
               <button type="button" class="flex items-center gap-2 w-full px-4 py-2.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors {val === m.id ? 'bg-zinc-50 dark:bg-zinc-700/50 font-medium' : ''}" role="option" aria-selected={val === m.id} onclick={() => select(m.id)}>
                 <img src={icon} alt="" class="w-5 h-5 shrink-0 rounded object-contain" />
                 <span class="min-w-0 flex-1 flex items-center gap-1.5">
-                  <span class="truncate">{m.id}</span>
+                  <span class="truncate">{modelDisplayName(m.id)}</span>
                   <ModelCapabilityBadges modelId={m.id} />
                 </span>
               </button>

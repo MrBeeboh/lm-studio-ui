@@ -66,33 +66,214 @@ export async function checkLmStudioConnection() {
 }
 
 /**
- * Fetch list of models from LM Studio.
- * Uses LM Studio 0.4.x native GET /api/v1/models (all downloaded LLMs) when available,
- * so all pull-downs show every model. Falls back to OpenAI-compat GET /v1/models (loaded only) for older LM Studio.
+ * Cloud API providers (OpenAI-compatible). When API key is set in localStorage, their models are included in getModels().
+ * Model id format: "provider:modelId" so we know which base URL and auth to use.
+ */
+const CLOUD_PROVIDERS = {
+  deepseek: {
+    name: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com',
+    /** No /v1 in base; we append /v1/chat/completions */
+    models: ['deepseek-chat', 'deepseek-reasoner'],
+    getKey: () => (typeof localStorage !== 'undefined' ? localStorage.getItem('deepSeekApiKey') : null) ?? '',
+  },
+  grok: {
+    name: 'Grok',
+    baseUrl: 'https://api.x.ai/v1',
+    /** xAI base already has /v1; chat path is /chat/completions */
+    models: ['grok-3-mini', 'grok-3', 'grok-4', 'grok-4-1-fast-reasoning', 'grok-4-1-fast-non-reasoning', 'grok-4-fast-reasoning', 'grok-4-latest'],
+    getKey: () => (typeof localStorage !== 'undefined' ? localStorage.getItem('grokApiKey') : null) ?? '',
+  },
+};
+
+/** Human-readable label for the model dropdown. "deepseek:deepseek-chat" → "DeepSeek: deepseek-chat". */
+export function modelDisplayName(id) {
+  if (!id || typeof id !== 'string') return id;
+  const i = id.indexOf(':');
+  if (i === -1) return id;
+  const provider = id.slice(0, i);
+  const label = CLOUD_PROVIDERS[provider]?.name ?? provider;
+  return `${label}: ${id.slice(i + 1)}`;
+}
+
+/** Get base URL and headers for a given model id. Local models use LM Studio; "provider:modelId" use cloud. */
+function getBaseAndAuth(modelId) {
+  if (!modelId || typeof modelId !== 'string') return { base: getLmStudioBase(), headers: {} };
+  const colon = modelId.indexOf(':');
+  if (colon === -1) return { base: getLmStudioBase(), headers: {} };
+  const providerId = modelId.slice(0, colon);
+  const provider = CLOUD_PROVIDERS[providerId];
+  if (!provider) return { base: getLmStudioBase(), headers: {} };
+  const key = provider.getKey()?.trim();
+  if (!key) return { base: getLmStudioBase(), headers: {} };
+  const headers = { Authorization: `Bearer ${key}` };
+  return { base: provider.baseUrl.replace(/\/$/, ''), headers };
+}
+
+/** Resolve model id for the API request (cloud: use part after colon; local: use as-is). */
+function resolveModelId(modelId) {
+  if (!modelId || typeof modelId !== 'string') return modelId;
+  const colon = modelId.indexOf(':');
+  return colon === -1 ? modelId : modelId.slice(colon + 1);
+}
+
+/** True when model id is Grok (grok:grok-4, etc.). Used to route to Responses API with tools for real-time search. */
+export function isGrokModel(modelId) {
+  return typeof modelId === 'string' && modelId.startsWith('grok:');
+}
+
+/** True when model id is DeepSeek (deepseek:deepseek-chat, etc.). Used to route image generation. */
+export function isDeepSeekModel(modelId) {
+  return typeof modelId === 'string' && modelId.startsWith('deepseek:');
+}
+
+/** DeepSeek does NOT have a native image generation API (they only analyze images). Endpoint below does not exist; kept for possible future proxy (e.g. Together AI). */
+const DEEPSEEK_IMAGES_GENERATIONS_URL = 'https://api.deepseek.com/v1/images/generations';
+
+/** xAI Responses API base (same host as chat; path is /responses). */
+const XAI_RESPONSES_BASE = 'https://api.x.ai/v1';
+
+/** xAI Image generations endpoint (separate from chat; creates new images from prompt). */
+const XAI_IMAGES_GENERATIONS_URL = 'https://api.x.ai/v1/images/generations';
+
+/** Built-in tools for real-time web, X, and image search (server-side execution by xAI). */
+/** Grok Responses API: only web_search and x_search are supported. search_images is not a valid tool type. */
+const GROK_REALTIME_TOOLS = [
+  { type: 'web_search' },
+  { type: 'x_search' },
+];
+
+/**
+ * Parse Chat API error response body and return a user-facing message.
+ * Handles OpenAI-style { error: { message, type, code } }, { message }, and plain text.
+ * Maps status + type to actionable guidance (e.g. 401 → check API key in Settings).
+ * @param {number} status - HTTP status code
+ * @param {string} bodyText - Raw response body
+ * @param {string} [modelId] - Requested model id (e.g. grok:grok-4) to tailor cloud vs local hints
+ * @returns {string} Message suitable for chatError / user display
+ */
+function parseChatApiError(status, bodyText, modelId) {
+  let apiMessage = '';
+  let errorType = '';
+  let code = '';
+  const isCloud = modelId && String(modelId).includes(':');
+  const cloudHint = isCloud
+    ? ' Check Settings → Cloud APIs (DeepSeek & Grok): confirm the key is correct, has no extra spaces, and is valid for the selected provider.'
+    : '';
+
+  if (bodyText && bodyText.trim()) {
+    try {
+      const json = JSON.parse(bodyText);
+      const err = json.error ?? json;
+      if (err && typeof err === 'object') {
+        apiMessage = err.message ?? err.msg ?? '';
+        errorType = err.type ?? err.error ?? '';
+        code = err.code ?? '';
+      } else if (typeof err === 'string') {
+        apiMessage = err;
+      } else if (typeof json.message === 'string') {
+        apiMessage = json.message;
+      }
+    } catch (_) {
+      apiMessage = bodyText.trim().slice(0, 200);
+    }
+  }
+
+  apiMessage = typeof apiMessage === 'string' ? apiMessage.trim() : '';
+
+  switch (status) {
+    case 401:
+      if (errorType === 'authentication_error' || code === 'invalid_request_error' || code === 'invalid_api_key' || /invalid|auth|key|unauthorized/i.test(apiMessage)) {
+        return `Invalid API key.${cloudHint}`;
+      }
+      return apiMessage || `Authentication failed.${cloudHint}`;
+    case 403:
+      return apiMessage || `Access forbidden. Your key may not have permission for this model.${cloudHint}`;
+    case 429:
+      if (code === 'rate_limit_exceeded') return 'Too many requests. Please wait a moment and try again.';
+      return apiMessage || 'Rate limit exceeded. Try again in a moment.';
+    case 500:
+    case 502:
+    case 503:
+      return apiMessage || 'The API server had an error. Try again later.';
+    case 400:
+      if (code === 'model_not_found') return apiMessage || 'Model not found. Check the model name in Settings or try a different model.';
+      if (code === 'context_length_exceeded') return apiMessage || 'Message or context too long. Try a shorter conversation or message.';
+      return apiMessage || 'Bad request. Check your request or try a different model.';
+    default:
+      return apiMessage || `Request failed (${status}). Try again or check Settings.`;
+  }
+}
+
+/** Return cloud provider models when API key is set. Ids are "provider:modelId". */
+function getCloudModels() {
+  const out = [];
+  for (const [providerId, p] of Object.entries(CLOUD_PROVIDERS)) {
+    if (!p.getKey()?.trim()) continue;
+    for (const modelId of p.models) {
+      out.push({ id: `${providerId}:${modelId}` });
+    }
+  }
+  return out;
+}
+
+/** Timeout for LM Studio model list fetch so we don't hang when server is down; then cloud-only list can still load. */
+const LOCAL_MODELS_TIMEOUT_MS = 10000;
+
+/** Timeout for cloud (Grok, DeepSeek) API requests. 120s per DeepSeek guidance for reasoning models. */
+const CLOUD_REQUEST_TIMEOUT_MS = 120000;
+
+/**
+ * Fetch list of models from LM Studio (local). Throws if unreachable or timeout.
  * @returns {Promise<{ id: string }[]>}
  */
-export async function getModels() {
+async function getLocalModels() {
   const base = getLmStudioBase();
   const rest = `${base}/api/v1`;
   const openai = `${base}/v1`;
-  const res = await fetch(`${rest}/models`);
-  if (res.ok) {
-    const data = await res.json();
-    const raw = data.models ?? (Array.isArray(data) ? data : []);
-    if (Array.isArray(raw) && raw.length > 0) {
-      const llms = raw
-        .filter((m) => m && m.type !== 'embedding')
-        .map(toModelItem)
-        .filter(Boolean);
-      if (llms.length > 0) return llms;
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), LOCAL_MODELS_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${rest}/models`, { signal: ctrl.signal });
+    if (res.ok) {
+      const data = await res.json();
+      const raw = data.models ?? (Array.isArray(data) ? data : []);
+      if (Array.isArray(raw) && raw.length > 0) {
+        const llms = raw
+          .filter((m) => m && m.type !== 'embedding')
+          .map(toModelItem)
+          .filter(Boolean);
+        if (llms.length > 0) {
+          clearTimeout(to);
+          return llms;
+        }
+      }
     }
+    const fallback = await fetch(`${openai}/models`, { signal: ctrl.signal });
+    if (!fallback.ok) throw new Error(`LM Studio models: ${fallback.status}`);
+    const data = await fallback.json();
+    const list = data.data ?? data;
+    const arr = Array.isArray(list) ? list : [];
+    return arr.map(toModelItem).filter(Boolean);
+  } finally {
+    clearTimeout(to);
   }
-  const fallback = await fetch(`${openai}/models`);
-  if (!fallback.ok) throw new Error(`LM Studio models: ${fallback.status}`);
-  const data = await fallback.json();
-  const list = data.data ?? data;
-  const arr = Array.isArray(list) ? list : [];
-  return arr.map(toModelItem).filter(Boolean);
+}
+
+/**
+ * Fetch list of models: LM Studio (local) + DeepSeek and Grok when API keys are set.
+ * If LM Studio is unreachable, returns only cloud models so you can still use DeepSeek/Grok.
+ * @returns {Promise<{ id: string }[]>}
+ */
+export async function getModels() {
+  let local = [];
+  try {
+    local = await getLocalModels();
+  } catch (_) {
+    // LM Studio unreachable; still return cloud models if configured
+  }
+  const cloud = getCloudModels();
+  return [...local, ...cloud];
 }
 
 /**
@@ -292,31 +473,442 @@ export async function unloadAllModelsNative() {
  * @param {Object} [opts.options] - temperature, max_tokens, etc.
  * @returns {Promise<{ content: string, usage?: object }>}
  */
+/**
+ * Parse content from xAI Responses API non-stream response (output array or choices).
+ */
+function parseGrokResponseOutput(data) {
+  if (data.choices?.[0]?.message?.content != null) {
+    return String(data.choices[0].message.content).trim();
+  }
+  const output = data.output;
+  if (!Array.isArray(output)) return '';
+  let text = '';
+  for (const item of output) {
+    if (item?.type === 'message' && item.content) {
+      const parts = Array.isArray(item.content) ? item.content : [item.content];
+      for (const p of parts) {
+        if (p?.type === 'output_text' && p.text != null) text += p.text;
+        else if (typeof p?.text === 'string') text += p.text;
+      }
+    }
+  }
+  return text.trim();
+}
+
+/**
+ * Generate images from a text prompt via xAI Images API (Grok Imagine).
+ * Uses POST https://api.x.ai/v1/images/generations; requires Grok API key.
+ * Do NOT send 'size' — use aspect_ratio and resolution per xAI docs (Feb 2026).
+ * @param {Object} opts
+ * @param {string} opts.prompt - Text prompt for image generation
+ * @param {number} [opts.n=1] - Number of images (1–3 for variations)
+ * @param {string} [opts.aspect_ratio='1:1'] - '1:1', '16:9', '9:16', 'auto', etc.
+ * @param {string} [opts.resolution='1k'] - '1k' or '2k'
+ * @param {string} [opts.response_format='url'] - 'url' or 'b64_json'
+ * @returns {Promise<{ data: Array<{ url?: string, b64_json?: string }> }>}
+ */
+export async function requestGrokImageGeneration({ prompt, n = 1, aspect_ratio = '1:1', resolution = '1k', response_format = 'url' }) {
+  const { headers: authHeaders } = getBaseAndAuth('grok:grok-4');
+  if (!authHeaders?.Authorization) throw new Error('Grok API key required. Add it in Settings → Cloud APIs.');
+  const body = {
+    model: 'grok-imagine-image',
+    prompt: String(prompt).trim(),
+    n: Math.max(1, Math.min(10, Number(n) || 1)),
+    aspect_ratio: aspect_ratio || '1:1',
+    resolution: resolution || '1k',
+    response_format,
+  };
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), CLOUD_REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(XAI_IMAGES_GENERATIONS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    clearTimeout(to);
+    if (!res.ok) {
+      const text = await res.text();
+      if (res.status === 404 || /model.*not.*found|invalid.*model/i.test(text)) {
+        const fallbackCtrl = new AbortController();
+        const fallbackTo = setTimeout(() => fallbackCtrl.abort(), 60000);
+        try {
+          const fallback = await fetch(XAI_IMAGES_GENERATIONS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders },
+            body: JSON.stringify({ ...body, model: 'grok-2-image' }),
+            signal: fallbackCtrl.signal,
+          });
+          clearTimeout(fallbackTo);
+          if (fallback.ok) return fallback.json();
+        } catch (_) {
+          clearTimeout(fallbackTo);
+        }
+      }
+      throw new Error(parseChatApiError(res.status, text, 'grok:grok-imagine-image'));
+    }
+    return res.json();
+  } catch (err) {
+    clearTimeout(to);
+    throw err;
+  }
+}
+
+/**
+ * DeepSeek image generation. NOTE: DeepSeek has no native /v1/images/generations; this would 404. Kept for future use if we proxy to Together AI etc.
+ * @param {{ prompt: string, n?: number, size?: string, quality?: string, response_format?: string }} opts
+ * @returns {Promise<{ data: Array<{ url?: string, b64_json?: string }> }>}
+ */
+export async function requestDeepSeekImageGeneration({
+  prompt,
+  n = 1,
+  size = '1024x1024',
+  quality = 'standard',
+  response_format = 'url',
+}) {
+  const { headers: authHeaders } = getBaseAndAuth('deepseek:deepseek-chat');
+  if (!authHeaders?.Authorization) throw new Error('DeepSeek API key required. Add it in Settings → Cloud APIs.');
+  const body = {
+    model: 'deepseek-image',
+    prompt: String(prompt).trim(),
+    n: Math.max(1, Math.min(10, Number(n) || 1)),
+    size: size || '1024x1024',
+    quality: quality || 'standard',
+    response_format,
+  };
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), CLOUD_REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(DEEPSEEK_IMAGES_GENERATIONS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    clearTimeout(to);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(parseChatApiError(res.status, text, 'deepseek:deepseek-image'));
+    }
+    return res.json();
+  } catch (err) {
+    clearTimeout(to);
+    throw err;
+  }
+}
+
+/** Together.xyz image generation: separate endpoint for DeepSeek path (DeepSeek has no native image API). Do not use for Grok. */
+const TOGETHER_IMAGES_GENERATIONS_URL = 'https://api.together.xyz/v1/images/generations';
+
+/**
+ * Generate image via Together AI (used when DeepSeek is selected; different endpoint from DeepSeek chat).
+ * Request format: model, prompt, width, height, steps, n, response_format.
+ * @param {{ prompt: string, apiKey: string, model?: string, width?: number, height?: number, steps?: number, n?: number }} opts
+ * @returns {Promise<{ data: Array<{ url?: string }> }>}
+ */
+export async function requestTogetherImageGeneration({
+  prompt,
+  apiKey,
+  model = 'black-forest-labs/FLUX.1-schnell',
+  width = 1024,
+  height = 1024,
+  steps = 4,
+  n = 1,
+}) {
+  const key = (apiKey || '').trim();
+  if (!key) throw new Error('Together API key required for image generation when using DeepSeek. Add it in Settings or .env.');
+  const body = {
+    model,
+    prompt: String(prompt).trim(),
+    width: Number(width) || 1024,
+    height: Number(height) || 1024,
+    steps: Math.max(1, Math.min(50, Number(steps) || 4)),
+    n: Math.max(1, Math.min(4, Number(n) || 1)),
+    response_format: 'url',
+  };
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), CLOUD_REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(TOGETHER_IMAGES_GENERATIONS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    clearTimeout(to);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(parseChatApiError(res.status, text, 'together:image'));
+    }
+    return res.json();
+  } catch (err) {
+    clearTimeout(to);
+    throw err;
+  }
+}
+
 export async function requestChatCompletion({ model, messages, options = {} }) {
-  const base = getLmStudioBase();
-  const res = await fetch(`${base}/v1/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      messages,
+  if (isGrokModel(model)) {
+    const { headers: authHeaders } = getBaseAndAuth(model);
+    const resolvedModel = resolveModelId(model);
+    const rawMax = options.max_tokens ?? 1024;
+    const maxTokens = Math.max(1, Math.min(8192, Number(rawMax) || 1024));
+    const body = {
+      model: resolvedModel,
+      input: messages,
       stream: false,
+      max_output_tokens: maxTokens,
       temperature: options.temperature ?? 0.3,
-      max_tokens: options.max_tokens ?? 1024,
-      ...(options.top_p != null && { top_p: options.top_p }),
-      ...(options.top_k != null && { top_k: options.top_k }),
-      ...(options.repeat_penalty != null && { repeat_penalty: options.repeat_penalty }),
-      ...(options.presence_penalty != null && { presence_penalty: options.presence_penalty }),
-      ...(options.frequency_penalty != null && { frequency_penalty: options.frequency_penalty }),
-    }),
-  });
+      tools: GROK_REALTIME_TOOLS,
+      tool_choice: 'auto',
+      enable_image_understanding: true,
+    };
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), CLOUD_REQUEST_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${XAI_RESPONSES_BASE}/responses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+      clearTimeout(to);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(parseChatApiError(res.status, text, model));
+      }
+      const data = await res.json();
+      const content = parseGrokResponseOutput(data);
+      return { content, usage: data.usage };
+    } catch (err) {
+      clearTimeout(to);
+      throw err;
+    }
+  }
+  const { base, headers: authHeaders } = getBaseAndAuth(model);
+  const resolvedModel = resolveModelId(model);
+  const url = base.endsWith('/v1') ? `${base}/chat/completions` : `${base}/v1/chat/completions`;
+  const headers = { 'Content-Type': 'application/json', ...authHeaders };
+  const isCloud = model && String(model).includes(':');
+  const rawMax = options.max_tokens ?? 1024;
+  const maxTokens = isCloud ? Math.max(1, Math.min(8192, Number(rawMax) || 1024)) : rawMax;
+  const body = {
+    model: resolvedModel,
+    messages,
+    stream: false,
+    temperature: options.temperature ?? 0.3,
+    max_tokens: maxTokens,
+    ...(options.top_p != null && { top_p: options.top_p }),
+    ...(options.top_k != null && { top_k: options.top_k }),
+    ...(!isCloud && options.repeat_penalty != null && { repeat_penalty: options.repeat_penalty }),
+    ...(!isCloud && options.presence_penalty != null && { presence_penalty: options.presence_penalty }),
+    ...(!isCloud && options.frequency_penalty != null && { frequency_penalty: options.frequency_penalty }),
+  };
+  const fetchOpts = { method: 'POST', headers, body: JSON.stringify(body) };
+  if (isCloud) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), CLOUD_REQUEST_TIMEOUT_MS);
+    fetchOpts.signal = ctrl.signal;
+    try {
+      const res = await fetch(url, fetchOpts);
+      clearTimeout(to);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(parseChatApiError(res.status, text, model));
+      }
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content ?? '';
+      return { content: String(content).trim(), usage: data.usage };
+    } catch (err) {
+      clearTimeout(to);
+      throw err;
+    }
+  }
+  const res = await fetch(url, fetchOpts);
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`LM Studio chat: ${res.status} ${text}`);
+    throw new Error(parseChatApiError(res.status, text, model));
   }
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content ?? '';
   return { content: String(content).trim(), usage: data.usage };
+}
+
+/** Regex to extract <render_searched_image image_id="..." size="..."> from stream deltas (Grok image search). */
+const GROK_RENDER_IMAGE_RE = /<render_searched_image\s+image_id=["']?([^"'\s>]+)["']?(?:\s+size=["']?([^"'\s>]*)["']?)?\s*\/?>/gi;
+
+/**
+ * Stream Grok via xAI Responses API with web_search + x_search (real-time). Server runs tools; we parse SSE.
+ * When enable_image_understanding is true, deltas may contain <render_searched_image image_id="...">; we strip them and call onImageRef.
+ * @param {(...args: any) => void} [onImageRef] - Called with { image_id } when a render tag is found
+ * @returns {Promise<{ usage?: object, elapsedMs: number, aborted?: boolean }>}
+ */
+async function streamGrokResponsesApi({ model, messages, options = {}, onChunk, onUsage, onDone, onImageRef, signal }) {
+  const startTime = Date.now();
+  let usage = null;
+  let doneCalled = false;
+  const callOnDone = () => {
+    if (!doneCalled) {
+      doneCalled = true;
+      onDone?.();
+    }
+  };
+  const { headers: authHeaders } = getBaseAndAuth(model);
+  const resolvedModel = resolveModelId(model);
+  const headers = { 'Content-Type': 'application/json', ...authHeaders };
+  const rawMax = options.max_tokens ?? 4096;
+  const maxTokens = Math.max(1, Math.min(8192, Number(rawMax) || 4096));
+  // Responses API uses "input" (array of message objects, same shape as messages)
+  const body = {
+    model: resolvedModel,
+    input: messages,
+    stream: true,
+    max_output_tokens: maxTokens,
+    temperature: options.temperature ?? 0.7,
+    tools: GROK_REALTIME_TOOLS,
+    tool_choice: 'auto',
+    enable_image_understanding: true,
+  };
+  const TAG_PREFIX = '<render_searched_image';
+  let imageBuffer = '';
+  let debugDeltaLogCount = 0;
+  const DEBUG_DELTA_MAX = 3;
+  function processDelta(rawDelta) {
+    if (typeof rawDelta !== 'string' || !rawDelta) return;
+    imageBuffer += rawDelta;
+    let emitted = 0;
+    let matchCount = 0;
+    let match;
+    GROK_RENDER_IMAGE_RE.lastIndex = 0;
+    while ((match = GROK_RENDER_IMAGE_RE.exec(imageBuffer)) !== null) {
+      matchCount++;
+      if (match.index > emitted) onChunk?.(imageBuffer.slice(emitted, match.index));
+      const size = (match[2] || 'LARGE').toUpperCase();
+      onImageRef?.({ image_id: match[1], size: size === 'SMALL' ? 'SMALL' : 'LARGE' });
+      emitted = match.index + match[0].length;
+    }
+    if (matchCount === 0 && /<|render|image_id/i.test(rawDelta) && debugDeltaLogCount < DEBUG_DELTA_MAX) {
+      debugDeltaLogCount++;
+      console.debug('[Grok image] raw delta (no tag matched):', rawDelta);
+    }
+    const rest = imageBuffer.slice(emitted);
+    const lastOpen = rest.lastIndexOf('<');
+    if (lastOpen >= 0 && TAG_PREFIX.startsWith(rest.slice(lastOpen))) {
+      if (lastOpen > 0) onChunk?.(rest.slice(0, lastOpen));
+      imageBuffer = rest.slice(lastOpen);
+    } else {
+      if (rest) onChunk?.(rest);
+      imageBuffer = '';
+    }
+  }
+
+  const timeoutCtrl = new AbortController();
+  const timeoutId = setTimeout(() => timeoutCtrl.abort(), CLOUD_REQUEST_TIMEOUT_MS);
+  let effectiveSignal = timeoutCtrl.signal;
+  if (signal) {
+    if (signal.aborted) {
+      clearTimeout(timeoutId);
+      timeoutCtrl.abort();
+    } else {
+      signal.addEventListener('abort', () => {
+        clearTimeout(timeoutId);
+        timeoutCtrl.abort();
+      });
+    }
+  }
+  try {
+    const res = await fetch(`${XAI_RESPONSES_BASE}/responses`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: effectiveSignal,
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(parseChatApiError(res.status, text, model));
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      let streamEnded = false;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          callOnDone();
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+          const payload = trimmed.slice(6);
+          if (payload === '[DONE]') {
+            callOnDone();
+            streamEnded = true;
+            break;
+          }
+          try {
+            const event = JSON.parse(payload);
+            const type = event.type ?? event.event;
+            // Fallback: chat.completion.chunk (in case xAI sends that for responses)
+            const choice = event.choices?.[0];
+            if (choice?.delta?.content) {
+              processDelta(choice.delta.content);
+            }
+            // Text deltas (Responses API style) — may contain <render_searched_image image_id="...">
+            if (type === 'response.output_text.delta' && event.delta != null) {
+              const d = typeof event.delta === 'string' ? event.delta : event.delta.text ?? '';
+              processDelta(d);
+            } else if (type === 'response.output_text.delta' && event.output_text?.delta != null) {
+              const d = event.output_text.delta;
+              processDelta(typeof d === 'string' ? d : d.text ?? '');
+            } else if (event.output_text?.delta != null) {
+              const d = event.output_text.delta;
+              processDelta(typeof d === 'string' ? d : d.text ?? '');
+            }
+            if (event.content_part?.type === 'output_text' && event.content_part.delta != null) {
+              processDelta(event.content_part.delta);
+            }
+            // Usage (any event can carry it)
+            if (event.usage) {
+              usage = event.usage;
+              onUsage?.(event.usage);
+            }
+            // Completion / done
+            if (type === 'response.completed' || type === 'response.output_text.done' || type === 'response.done') {
+              callOnDone();
+              streamEnded = true;
+            }
+            if (choice?.finish_reason != null) {
+              callOnDone();
+              streamEnded = true;
+            }
+            if (streamEnded) break;
+          } catch (_) {}
+        }
+        if (streamEnded) break;
+      }
+      if (imageBuffer) onChunk?.(imageBuffer);
+    } catch (readErr) {
+      if (readErr?.name === 'AbortError') {
+        return { usage, elapsedMs: Date.now() - startTime, aborted: true };
+      }
+      throw readErr;
+    }
+    return { usage, elapsedMs: Date.now() - startTime };
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      return { usage, elapsedMs: Date.now() - startTime, aborted: true };
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 /**
@@ -328,10 +920,14 @@ export async function requestChatCompletion({ model, messages, options = {} }) {
  * @param {(chunk: string) => void} opts.onChunk
  * @param {(usage: { prompt_tokens?: number, completion_tokens?: number }) => void} [opts.onUsage]
  * @param {() => void} [opts.onDone] - Called when stream ends ([DONE] line or connection closed). Use to clear busy UI immediately.
+ * @param {(ref: { image_id: string }) => void} [opts.onImageRef] - (Grok only) Called when a <render_searched_image image_id="..."> is found in the stream.
  * @param {AbortSignal} [opts.signal] - AbortSignal to cancel the stream
  * @returns {Promise<{ usage?: object, elapsedMs: number, aborted?: boolean }>}
  */
-export async function streamChatCompletion({ model, messages, options = {}, onChunk, onUsage, onDone, signal }) {
+export async function streamChatCompletion({ model, messages, options = {}, onChunk, onUsage, onDone, onImageRef, signal }) {
+  if (isGrokModel(model)) {
+    return streamGrokResponsesApi({ model, messages, options, onChunk, onUsage, onDone, onImageRef, signal });
+  }
   const startTime = Date.now();
   let usage = null;
   let doneCalled = false;
@@ -341,31 +937,58 @@ export async function streamChatCompletion({ model, messages, options = {}, onCh
       onDone?.();
     }
   };
-  const base = getLmStudioBase();
+  const { base, headers: authHeaders } = getBaseAndAuth(model);
+  const resolvedModel = resolveModelId(model);
+  const streamUrl = base.endsWith('/v1') ? `${base}/chat/completions` : `${base}/v1/chat/completions`;
+  const headers = { 'Content-Type': 'application/json', ...authHeaders };
+  const isCloud = model && String(model).includes(':');
+  const rawMax = options.max_tokens ?? 4096;
+  const maxTokens = isCloud ? Math.max(1, Math.min(8192, Number(rawMax) || 4096)) : rawMax;
+  const streamBody = {
+    model: resolvedModel,
+    messages,
+    stream: true,
+    ...(!isCloud && { stream_options: { include_usage: true } }),
+    temperature: options.temperature ?? 0.7,
+    max_tokens: maxTokens,
+    ...(options.top_p != null && { top_p: options.top_p }),
+    ...(options.top_k != null && { top_k: options.top_k }),
+    ...(!isCloud && options.repeat_penalty != null && { repeat_penalty: options.repeat_penalty }),
+    ...(!isCloud && options.presence_penalty != null && { presence_penalty: options.presence_penalty }),
+    ...(!isCloud && options.frequency_penalty != null && { frequency_penalty: options.frequency_penalty }),
+    ...(options.stop?.length && { stop: options.stop }),
+    ...(!isCloud && options.ttl != null && Number(options.ttl) > 0 && { ttl: Number(options.ttl) }),
+  };
+  let effectiveSignal = signal;
+  let timeoutId = null;
+  if (isCloud) {
+    const timeoutCtrl = new AbortController();
+    timeoutId = setTimeout(() => timeoutCtrl.abort(), CLOUD_REQUEST_TIMEOUT_MS);
+    if (signal) {
+      if (signal.aborted) {
+        clearTimeout(timeoutId);
+        timeoutCtrl.abort();
+      } else {
+        signal.addEventListener('abort', () => {
+          clearTimeout(timeoutId);
+          timeoutCtrl.abort();
+        });
+      }
+    }
+    effectiveSignal = timeoutCtrl.signal;
+  }
+
   try {
-    const res = await fetch(`${base}/v1/chat/completions`, {
+    const res = await fetch(streamUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: true,
-        stream_options: { include_usage: true },
-        temperature: options.temperature ?? 0.7,
-        max_tokens: options.max_tokens ?? 4096,
-        ...(options.top_p != null && { top_p: options.top_p }),
-        ...(options.top_k != null && { top_k: options.top_k }),
-        ...(options.repeat_penalty != null && { repeat_penalty: options.repeat_penalty }),
-        ...(options.presence_penalty != null && { presence_penalty: options.presence_penalty }),
-        ...(options.frequency_penalty != null && { frequency_penalty: options.frequency_penalty }),
-        ...(options.stop?.length && { stop: options.stop }),
-        ...(options.ttl != null && Number(options.ttl) > 0 && { ttl: Number(options.ttl) }),
-      }),
-      signal,
+      headers,
+      body: JSON.stringify(streamBody),
+      signal: effectiveSignal,
     });
+    if (timeoutId) clearTimeout(timeoutId);
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`LM Studio chat: ${res.status} ${text}`);
+      throw new Error(parseChatApiError(res.status, text, model));
     }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -422,6 +1045,8 @@ export async function streamChatCompletion({ model, messages, options = {}, onCh
       return { usage, elapsedMs: Date.now() - startTime, aborted: true };
     }
     throw err;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 

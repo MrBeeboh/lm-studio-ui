@@ -15,11 +15,12 @@ export function getModelCapabilities(modelId) {
   // Tools / function calling
   const tools =
     /\b(tool|tools|fc|function[-.]?call|agent)\b/.test(lower) ||
-    /qwen2\.5|qwen2\.7|qwen3|llama[-.]?3\.1|llama[-.]?3\.2|llama[-.]?4|claude|gpt[-.]?4|mistral[-.]?large|command[-.]?r|deepseek|gemma|phi[-.]?4|minicpm|yi[-.]?1\.5|yi[-.]?2|schematron|ministral|glm[-.]?4/i.test(lower);
+    /qwen2\.5|qwen2\.7|qwen3|llama[-.]?3\.1|llama[-.]?3\.2|llama[-.]?4|claude|gpt[-.]?4|mistral[-.]?large|command[-.]?r|deepseek|gemma|phi[-.]?4|minicpm|yi[-.]?1\.5|yi[-.]?2|schematron|ministral|glm[-.]?4|grok/i.test(lower);
   // Thinking / reasoning (extended chain-of-thought, R1-style, deep thinking)
   const thinking =
     /\b(thinking|reasoning|chain[-.]?of[-.]?thought|cot)\b/.test(lower) ||
-    /[-.]r1[-.]|deepseek[-.]?r1|phi[-.]?4[-.]?mini|qwen3[-.]?4b|glm[-.]?4|minicpm[-.]?v/i.test(lower);
+    /[-.]r1[-.]|deepseek[-.]?r1|phi[-.]?4[-.]?mini|qwen3[-.]?4b|glm[-.]?4|minicpm[-.]?v/i.test(lower) ||
+    (/grok[-.]?4/i.test(lower) && !/non[-.]?reasoning/i.test(lower));
   // JSON / structured output
   const json = /\bjson\b/.test(lower) || /schematron/i.test(lower);
   return { vision, tools, thinking, json };

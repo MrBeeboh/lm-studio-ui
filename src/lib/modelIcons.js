@@ -15,6 +15,7 @@ const MODEL_ICON_MAP = [
   [/baidu|ernie/i, 'baidu-ernie-color.svg'],
   [/zai[-_]?org|zai\b/i, 'zai-color.svg'],
   [/dasd|thinking/i, 'dasd-thinking-color.svg'],
+  [/grok|xai/i, 'grok-ai-icon.webp'],
   [/deepseek/i, 'deepseek-color.svg'],
   [/dolphin/i, 'dolphin-color.svg'],
   [/gemma|google/i, 'gemma-color.svg'],

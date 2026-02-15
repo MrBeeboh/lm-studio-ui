@@ -14,6 +14,12 @@
   const contentArray = $derived(
     Array.isArray(message.content) ? message.content : [],
   );
+  const imageRefs = $derived(
+    Array.isArray(message.imageRefs) ? message.imageRefs : [],
+  );
+  const imageUrls = $derived(
+    Array.isArray(message.imageUrls) ? message.imageUrls : [],
+  );
   const parts = $derived(
     isAssistant && content ? splitThinkingAndAnswer(content) : [],
   );
@@ -54,11 +60,11 @@
 </script>
 
 <div
-  class="flex {isUser ? 'justify-end' : 'justify-start'}"
+  class="flex {isUser ? 'justify-end' : 'justify-start'} w-full"
   in:fly={{ y: 20, duration: 380, easing: quintOut }}
 >
   <div
-    class="max-w-full rounded-2xl px-4 py-3 shadow-sm
+    class="w-full max-w-[min(42rem,100%)] rounded-2xl px-4 py-3 shadow-sm
       {isUser
       ? 'ui-user-bubble'
       : 'bg-white dark:bg-zinc-800/90 text-zinc-900 dark:text-zinc-100 border border-zinc-200/80 dark:border-zinc-700/80'}"
@@ -138,6 +144,35 @@
       {:else}
         <div class="prose-chat prose dark:prose-invert max-w-none">
           {@html html}
+        </div>
+      {/if}
+      {#if isAssistant && imageRefs.length}
+        <div class="mt-3 flex gap-2 overflow-x-auto pb-1 rounded-lg" role="list" aria-label="Searched images">
+          {#each imageRefs as ref (ref.image_id)}
+            <div class="shrink-0 rounded border border-zinc-200 dark:border-zinc-600 overflow-hidden bg-zinc-100 dark:bg-zinc-800/80" role="listitem">
+              <img
+                src={"https://cdn.x.ai/images?id=" + ref.image_id + "&size=" + (ref.size === "SMALL" ? "SMALL" : "LARGE")}
+                alt={"Searched image (ID: " + ref.image_id + ")"}
+                class="max-h-48 w-auto object-contain"
+                loading="lazy"
+              />
+              <p class="p-1.5 text-[10px] text-zinc-500 dark:text-zinc-400 truncate max-w-[120px]">ID: {ref.image_id}</p>
+            </div>
+          {/each}
+        </div>
+      {/if}
+      {#if isAssistant && imageUrls.length}
+        <div class="mt-3 flex gap-2 overflow-x-auto pb-1 rounded-lg" role="list" aria-label="Generated images">
+          {#each imageUrls as url (url)}
+            <div class="shrink-0 rounded border border-zinc-200 dark:border-zinc-600 overflow-hidden bg-zinc-100 dark:bg-zinc-800/80" role="listitem">
+              <img
+                src={url}
+                alt=""
+                class="max-h-64 w-auto object-contain"
+                loading="lazy"
+              />
+            </div>
+          {/each}
         </div>
       {/if}
     {/if}
