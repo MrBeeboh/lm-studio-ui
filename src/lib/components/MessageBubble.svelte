@@ -2,8 +2,23 @@
   import { renderMarkdown, splitThinkingAndAnswer } from "$lib/markdown.js";
   import { fly } from "svelte/transition";
   import { quintOut } from "svelte/easing";
+  import { get } from "svelte/store";
   import PerfStats from "$lib/components/PerfStats.svelte";
-  import { pinnedContent } from "$lib/stores.js";
+  import AuthVideo from "$lib/components/AuthVideo.svelte";
+  import { pinnedContent, deepinfraApiKey } from "$lib/stores.js";
+
+  /** DeepInfra key: init from store + env so it's there on first paint; subscribe to stay in sync with Settings. */
+  let deepinfraKey = $state(
+    (get(deepinfraApiKey)?.trim() || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_DEEPINFRA_API_KEY) || '').trim(),
+  );
+  $effect(() => {
+    const unsub = deepinfraApiKey.subscribe((v) => {
+      const k = (typeof v === 'string' ? v : '').trim()
+        || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_DEEPINFRA_API_KEY || '').trim();
+      deepinfraKey = k;
+    });
+    return () => unsub();
+  });
 
   let { message } = $props();
   const isUser = $derived(message.role === "user");
@@ -19,6 +34,9 @@
   );
   const imageUrls = $derived(
     Array.isArray(message.imageUrls) ? message.imageUrls : [],
+  );
+  const videoUrls = $derived(
+    Array.isArray(message.videoUrls) ? message.videoUrls : [],
   );
   const parts = $derived(
     isAssistant && content ? splitThinkingAndAnswer(content) : [],
@@ -174,6 +192,18 @@
             </div>
           {/each}
         </div>
+      {/if}
+      {#if isAssistant && videoUrls.length}
+        <div class="mt-3 flex flex-col gap-2" role="list" aria-label="Generated videos">
+          {#each videoUrls as url (url)}
+            <div class="rounded border border-zinc-200 dark:border-zinc-600 overflow-hidden bg-zinc-100 dark:bg-zinc-800/80 max-w-2xl" role="listitem">
+              <AuthVideo url={url} apiKey={deepinfraKey} />
+            </div>
+          {/each}
+        </div>
+      {/if}
+      {#if isAssistant && (content.includes('Generated image') || content.includes('Generated video')) && !imageUrls.length && !videoUrls.length}
+        <p class="mt-2 text-sm text-amber-600 dark:text-amber-400">Media could not be loaded. Try generating again and ensure your DeepInfra API key is set in Settings.</p>
       {/if}
     {/if}
 

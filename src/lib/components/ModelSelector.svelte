@@ -1,7 +1,7 @@
 <script>
   import { tick } from 'svelte';
   import { models, selectedModelId, presetDefaultModels, lmStudioBaseUrl, modelSelectionNotification } from '$lib/stores.js';
-  import { getModels, modelDisplayName } from '$lib/api.js';
+  import { getModels, modelDisplayName, getModelTypeTag } from '$lib/api.js';
   import { getModelIcon, getQuantization, ensureModelIcons, modelIconOverrides } from '$lib/modelIcons.js';
   import { findSmallestModel } from '$lib/utils/modelSelection.js';
   import ModelCapabilityBadges from '$lib/components/ModelCapabilityBadges.svelte';
@@ -121,6 +121,9 @@
         {@const selIcon = getModelIcon($selectedModelId, $modelIconOverrides)}
         <img src={selIcon} alt="" class="w-4 h-4 shrink-0 rounded object-contain" />
         <span class="truncate font-bold uppercase tracking-tight text-xs">{modelDisplayName($selectedModelId)}</span>
+        {#if getModelTypeTag($selectedModelId)}
+          <span class="shrink-0 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded" style="background: color-mix(in srgb, var(--ui-accent) 12%, transparent); color: var(--ui-accent);">{getModelTypeTag($selectedModelId)}</span>
+        {/if}
         <ModelCapabilityBadges modelId={$selectedModelId} class="ml-0.5" />
       {:else}
         <span class="text-zinc-500 dark:text-zinc-400">Select model</span>
@@ -152,6 +155,9 @@
           <img src={icon} alt="" class="w-5 h-5 shrink-0 rounded object-contain" />
           <span class="min-w-0 flex-1 flex items-center gap-1.5">
             <span class="truncate">{modelDisplayName(m.id)}</span>
+            {#if getModelTypeTag(m.id)}
+              <span class="shrink-0 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded" style="background: color-mix(in srgb, var(--ui-accent) 12%, transparent); color: var(--ui-accent);">{getModelTypeTag(m.id)}</span>
+            {/if}
             <ModelCapabilityBadges modelId={m.id} />
           </span>
         </button>

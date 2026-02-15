@@ -86,6 +86,27 @@ const CLOUD_PROVIDERS = {
   },
 };
 
+/** Short descriptive tag for cloud models (shown next to name in selector). */
+const MODEL_TYPE_TAGS = {
+  'grok-3-mini': 'Mini Chat',
+  'grok-3': 'General Chat',
+  'grok-4': 'Reasoning',
+  'grok-4-1-fast-reasoning': 'Fast Reasoning',
+  'grok-4-1-fast-non-reasoning': 'Fast Chat',
+  'grok-4-fast-reasoning': 'Fast Reasoning',
+  'grok-4-latest': 'Reasoning (Latest)',
+  'deepseek-chat': 'Chat',
+  'deepseek-reasoner': 'Reasoning',
+};
+
+/** Get short model type tag (e.g. "Reasoning", "Fast Chat"). Returns null if no tag. */
+export function getModelTypeTag(id) {
+  if (!id || typeof id !== 'string') return null;
+  const colon = id.indexOf(':');
+  const modelPart = colon === -1 ? id : id.slice(colon + 1);
+  return MODEL_TYPE_TAGS[modelPart] ?? null;
+}
+
 /** Human-readable label for the model dropdown. "deepseek:deepseek-chat" → "DeepSeek: deepseek-chat". */
 export function modelDisplayName(id) {
   if (!id || typeof id !== 'string') return id;
@@ -644,6 +665,116 @@ export async function requestTogetherImageGeneration({
     return res.json();
   } catch (err) {
     clearTimeout(to);
+    throw err;
+  }
+}
+
+/** DeepInfra inference base (image + video). Per official docs: https://api.deepinfra.com/v1/inference/{model_id} */
+const DEEPINFRA_INFERENCE_BASE = 'https://api.deepinfra.com/v1/inference';
+
+/**
+ * Text-to-image via DeepInfra. Synchronous; returns base64 in response.images[0].
+ * @param {{ apiKey: string, modelId: string, prompt: string, num_images?: number, num_inference_steps?: number, guidance_scale?: number, width?: number, height?: number, negative_prompt?: string }} opts
+ * @returns {Promise<{ data: Array<{ url: string }> }>} data[].url are data URLs (data:image/png;base64,...) for display
+ */
+export async function requestDeepInfraImageGeneration({
+  apiKey,
+  modelId,
+  prompt,
+  num_images = 1,
+  num_inference_steps = 30,
+  guidance_scale = 7.5,
+  width = 1024,
+  height = 1024,
+  negative_prompt,
+}) {
+  const key = (apiKey || '').trim();
+  if (!key) throw new Error('DeepInfra API key required. Add it in Settings → Cloud APIs.');
+  const body = {
+    prompt: String(prompt).trim(),
+    num_images: Math.max(1, Math.min(4, Number(num_images) || 1)),
+    num_inference_steps: Math.max(1, Math.min(50, Number(num_inference_steps) || 30)),
+    guidance_scale: Number(guidance_scale) || 7.5,
+    width: Math.max(128, Math.min(1024, Number(width) || 1024)),
+    height: Math.max(128, Math.min(1024, Number(height) || 1024)),
+  };
+  if (negative_prompt != null && String(negative_prompt).trim() !== '') body.negative_prompt = String(negative_prompt).trim();
+  const url = `${DEEPINFRA_INFERENCE_BASE}/${encodeURIComponent(modelId)}`;
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), CLOUD_REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    clearTimeout(to);
+    const data = await res.json();
+    if (!res.ok) {
+      const msg = data?.detail?.error || data?.detail || JSON.stringify(data) || res.statusText;
+      throw new Error(parseChatApiError(res.status, msg, 'deepinfra:image'));
+    }
+    const rawImages = data?.images ?? data?.result?.images ?? [];
+    const images = Array.isArray(rawImages) ? rawImages : [];
+    if (images.length === 0) throw new Error('DeepInfra image response had no images.');
+    const urls = images.map((item) => {
+      if (typeof item === 'string') {
+        if (item.startsWith('data:') || item.startsWith('http://') || item.startsWith('https://')) return item;
+        return `data:image/png;base64,${item}`;
+      }
+      if (item && typeof item === 'object' && typeof item.url === 'string') return item.url;
+      return null;
+    }).filter(Boolean);
+    if (urls.length === 0) throw new Error('DeepInfra image response had no images.');
+    return { data: urls.map((url) => ({ url })) };
+  } catch (err) {
+    clearTimeout(to);
+    throw err;
+  }
+}
+
+/**
+ * Text-to-video via DeepInfra. Synchronous; returns relative path in response.video_url or response.videos. Full URL = base + path.
+ * CRITICAL (DeepInfra docs): Video models accept ONLY the "prompt" field. ANY other field (width, height, duration, negative_prompt, etc.) causes "signal aborted without reason". Do not add or spread any options here.
+ * @param {{ apiKey: string, modelId: string, prompt: string }} opts
+ * @returns {Promise<{ videoUrl: string }>}
+ */
+export async function requestDeepInfraVideoGeneration({ apiKey, modelId, prompt }) {
+  const key = (apiKey || '').trim();
+  if (!key) throw new Error('DeepInfra API key required. Add it in Settings → Cloud APIs.');
+  const promptOnly = String(prompt ?? '').trim();
+  const url = `${DEEPINFRA_INFERENCE_BASE}/${modelId}`;
+  const VIDEO_TIMEOUT_MS = 1200000; // 20 minutes — DeepInfra video takes 5–10+ min; webhooks need a backend so we wait
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), VIDEO_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ prompt: promptOnly }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(to);
+    const data = await res.json();
+    if (!res.ok) {
+      const msg = data?.detail?.error || data?.detail || JSON.stringify(data) || res.statusText;
+      throw new Error(parseChatApiError(res.status, msg, 'deepinfra:video'));
+    }
+    const videoPath =
+      data?.video_url ?? data?.videos ?? data?.result?.video_url ?? data?.result?.videos ?? null;
+    const pathStr = typeof videoPath === 'string' ? videoPath : (Array.isArray(videoPath) && videoPath[0]) ? videoPath[0] : null;
+    if (pathStr == null || typeof pathStr !== 'string' || !pathStr.trim()) throw new Error('DeepInfra video response had no video_url or videos.');
+    const fullVideoUrl =
+      pathStr.startsWith('data:') || pathStr.startsWith('http://') || pathStr.startsWith('https://')
+        ? pathStr
+        : `https://api.deepinfra.com${pathStr.startsWith('/') ? pathStr : `/${pathStr}`}`;
+    return { videoUrl: fullVideoUrl };
+  } catch (err) {
+    clearTimeout(to);
+    if (err?.name === 'AbortError') {
+      throw new Error(`Video generation timed out after ${VIDEO_TIMEOUT_MS / 60000} minutes. Try again or use a shorter prompt.`);
+    }
     throw err;
   }
 }

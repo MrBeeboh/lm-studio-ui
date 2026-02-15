@@ -24,6 +24,7 @@ export async function createConversation(model = '') {
     id,
     title: 'New chat',
     model,
+    pinned: false,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   });
@@ -57,18 +58,41 @@ export async function deleteAllConversations() {
 }
 
 /**
- * @returns {Promise<Array<{ id: string, title: string, model: string, createdAt: number, updatedAt: number }>>}
+ * @returns {Promise<Array<{ id: string, title: string, model: string, pinned?: boolean, createdAt: number, updatedAt: number }>>}
  */
 export async function listConversations() {
   return conversationsTable.orderBy('updatedAt').reverse().toArray();
 }
 
 /**
+ * Toggle pinned state for a conversation.
  * @param {string} conversationId
- * @param {{ role: string, content: string|Array, stats?: Object, modelId?: string, imageRefs?: Array<{ image_id: string }>, imageUrls?: string[] }} message
+ * @returns {Promise<boolean>} new pinned state
+ */
+export async function toggleConversationPin(conversationId) {
+  const conv = await conversationsTable.get(conversationId);
+  if (!conv) return false;
+  const next = !(conv.pinned === true);
+  await updateConversation(conversationId, { pinned: next });
+  return next;
+}
+
+/**
+ * @returns {Promise<Array<{ id: string, title: string, model: string, pinned: boolean, createdAt: number, updatedAt: number }>>}
+ */
+export async function listPinnedConversations() {
+  const all = await listConversations();
+  return all.filter((c) => c.pinned === true);
+}
+
+/**
+ * @param {string} conversationId
+ * @param {{ role: string, content: string|Array, stats?: Object, modelId?: string, imageRefs?: Array<{ image_id: string }>, imageUrls?: string[], videoUrls?: string[] }} message
  */
 export async function addMessage(conversationId, message) {
   const id = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const imageUrls = message.imageUrls;
+  const videoUrls = message.videoUrls;
   await messagesTable.add({
     id,
     conversationId,
@@ -77,7 +101,8 @@ export async function addMessage(conversationId, message) {
     stats: message.stats ?? null,
     modelId: message.modelId ?? null,
     imageRefs: message.imageRefs ?? null,
-    imageUrls: message.imageUrls ?? null,
+    imageUrls: Array.isArray(imageUrls) ? [...imageUrls] : null,
+    videoUrls: Array.isArray(videoUrls) ? [...videoUrls] : null,
     createdAt: Date.now(),
   });
   return id;

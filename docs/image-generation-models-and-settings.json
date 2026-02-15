@@ -1,0 +1,60 @@
+{
+  "_comment": "Verified Together AI config (2026-02-15). Source: image-models-and-settings-for-verification.json. Grok not in this file.",
+  "together_ai": {
+    "provider": "Together AI",
+    "endpoint": "https://api.together.xyz/v1/images/generations",
+    "models": [
+      {
+        "index": 0,
+        "label": "FLUX.1 Schnell",
+        "model": "black-forest-labs/FLUX.1-schnell",
+        "step_options": [
+          {"label": "Minimal", "steps": 1},
+          {"label": "Quick", "steps": 2},
+          {"label": "Standard", "steps": 4, "recommended": true}
+        ],
+        "resolutions": [
+          {"width": 1024, "height": 1024, "label": "1:1 Square"},
+          {"width": 1152, "height": 896, "label": "Portrait"},
+          {"width": 896, "height": 1152, "label": "Landscape"},
+          {"width": 1280, "height": 768, "label": "Wide"}
+        ],
+        "n_options": [1, 2, 4]
+      },
+      {
+        "index": 1,
+        "label": "FLUX.1 Dev",
+        "model": "black-forest-labs/FLUX.1-dev",
+        "step_options": [
+          {"label": "Quick", "steps": 20},
+          {"label": "Standard", "steps": 25, "recommended": true},
+          {"label": "Detailed", "steps": 30},
+          {"label": "High Detail", "steps": 50}
+        ],
+        "resolutions": [
+          {"width": 1024, "height": 1024, "label": "1:1 Square"},
+          {"width": 1152, "height": 896, "label": "Portrait"},
+          {"width": 1344, "height": 768, "label": "Wide"},
+          {"width": 1728, "height": 1152, "label": "Panoramic"}
+        ],
+        "n_options": [1, 2, 4]
+      },
+      {
+        "index": 2,
+        "label": "FLUX.1 Pro",
+        "model": "black-forest-labs/FLUX.1-pro",
+        "step_options": [
+          {"label": "Standard", "steps": 25, "recommended": true},
+          {"label": "Detailed", "steps": 30},
+          {"label": "High Detail", "steps": 50}
+        ],
+        "resolutions": [
+          {"width": 1024, "height": 1024, "label": "1:1 Square"},
+          {"width": 2000, "height": 2000, "label": "Large Square"},
+          {"width": 1820, "height": 1024, "label": "16:9 Widescreen"}
+        ],
+        "n_options": [1, 2, 4]
+      }
+    ]
+  }
+}

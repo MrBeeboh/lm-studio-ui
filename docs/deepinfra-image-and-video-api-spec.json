@@ -1,0 +1,115 @@
+{
+  "purpose": "Exact info needed to wire DeepInfra for text-to-image and text-to-video when DeepSeek is selected. Fill in the values (from DeepInfra docs or support), then we implement. Single API key for both.",
+  "last_updated": "2026-02",
+
+  "auth": {
+    "description": "One DeepInfra API key for both image and video.",
+    "header_name": "Authorization",
+    "header_value_format": "Bearer YOUR_DEEPINFRA_API_KEY",
+    "where_key_stored": "Settings (e.g. DeepInfra API key) or env (e.g. VITE_DEEPINFRA_API_KEY)",
+    "fill_in": {
+      "header_name": "",
+      "header_value_format": "",
+      "env_var_name": ""
+    }
+  },
+
+  "text_to_image": {
+    "description": "Image generation via DeepInfra when user has DeepSeek chat model selected.",
+    "fill_in": {
+      "endpoint_url": "",
+      "http_method": "POST",
+      "request_body": {
+        "prompt": "string, required",
+        "model": "string, required — exact model id(s) from DeepInfra",
+        "width": "number, optional — allowed range or list",
+        "height": "number, optional — allowed range or list",
+        "steps": "number, optional — allowed range",
+        "n": "number, optional — how many images (e.g. 1-4)",
+        "response_format": "url or b64_json, optional",
+        "other_params": "list any other supported params (e.g. guidance_scale, seed)"
+      },
+      "response_shape": "How to get image URL or bytes. Example: data[0].url or data[0].b64_json or output.url. If async: job_id then poll URL + response shape when done.",
+      "models": [
+        {
+          "model_id": "",
+          "label": "",
+          "step_options": "allowed steps (e.g. [1,2,4,8]) or min/max",
+          "resolutions": "allowed width/height list or rules (e.g. multiples of 8, max 2048)",
+          "notes": ""
+        }
+      ],
+      "error_response": "How errors are returned (e.g. HTTP 4xx body shape, error message field)"
+    },
+    "required_from_you": [
+      "Exact endpoint URL (e.g. https://api.deepinfra.com/v1/...)",
+      "Exact request body field names and types (required vs optional)",
+      "Exact response path to image URL or b64 (e.g. data[0].url)",
+      "List of model ids and supported steps/resolutions per model (or one default model)",
+      "Whether response is sync or async (if async: poll endpoint and result shape)"
+    ]
+  },
+
+  "text_to_video": {
+    "description": "Video generation via DeepInfra when user has DeepSeek chat model selected.",
+    "fill_in": {
+      "endpoint_url": "",
+      "http_method": "POST",
+      "request_body": {
+        "prompt": "string, required",
+        "model": "string, required — exact model id from DeepInfra",
+        "duration_seconds": "number, optional — allowed values",
+        "width": "number, optional",
+        "height": "number, optional",
+        "aspect_ratio": "string, optional — e.g. 16:9, 1:1",
+        "other_params": "list any other supported params"
+      },
+      "response_shape": "Sync: path to video URL or bytes (e.g. output[0].url). Async: job_id, then poll endpoint + path to video URL when status=completed.",
+      "polling_if_async": {
+        "status_endpoint": "e.g. GET https://api.deepinfra.com/v1/jobs/{job_id}",
+        "status_field": "e.g. status",
+        "completed_value": "e.g. completed",
+        "result_path_when_done": "e.g. output.video_url or result.url"
+      },
+      "models": [
+        {
+          "model_id": "",
+          "label": "",
+          "duration_options": "e.g. [5, 10] seconds",
+          "resolution_or_aspect": "allowed options",
+          "notes": ""
+        }
+      ],
+      "error_response": "How errors are returned"
+    },
+    "required_from_you": [
+      "Exact endpoint URL for create-video (and if async, poll/result URL)",
+      "Exact request body field names and types",
+      "Exact response path to video URL (or b64) — sync or async result shape",
+      "If async: poll endpoint, status field name, value for 'completed', path to video URL in final response",
+      "Model id(s) and supported duration/resolution/aspect_ratio options"
+    ]
+  },
+
+  "summary_checklist": {
+    "image": [
+      "endpoint_url",
+      "request_body_spec (all fields, required/optional)",
+      "response_path_to_image_url_or_b64",
+      "model_id(s)_and_their_step_resolution_options",
+      "sync_or_async_and_if_async_poll_spec"
+    ],
+    "video": [
+      "endpoint_url",
+      "request_body_spec (all fields, required/optional)",
+      "response_path_to_video_url_or_b64",
+      "model_id(s)_and_duration_resolution_options",
+      "sync_or_async_and_if_async_poll_spec"
+    ],
+    "auth": [
+      "same_key_for_both",
+      "header_format",
+      "env_or_settings_key_name"
+    ]
+  }
+}

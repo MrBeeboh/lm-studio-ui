@@ -135,6 +135,13 @@ if (typeof localStorage !== 'undefined') {
   togetherApiKey.subscribe((v) => localStorage.setItem('togetherApiKey', (typeof v === 'string' ? v : '').trim()));
 }
 
+/** DeepInfra API key: image + video generation when DeepSeek is selected. Single key for both. */
+const getStoredDeepinfraApiKey = () => (typeof localStorage !== 'undefined' ? (localStorage.getItem('deepinfraApiKey') ?? '').trim() : null) ?? '';
+export const deepinfraApiKey = writable(getStoredDeepinfraApiKey());
+if (typeof localStorage !== 'undefined') {
+  deepinfraApiKey.subscribe((v) => localStorage.setItem('deepinfraApiKey', (typeof v === 'string' ? v : '').trim()));
+}
+
 /** Together image endpoint name: required for FLUX.1-schnell-Free (create dedicated endpoint at api.together.ai, then paste the endpoint name here). */
 const getStoredTogetherImageEndpoint = () => (typeof localStorage !== 'undefined' ? (localStorage.getItem('togetherImageEndpoint') ?? '').trim() : null) ?? '';
 export const togetherImageEndpoint = writable(getStoredTogetherImageEndpoint());

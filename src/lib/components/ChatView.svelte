@@ -1,8 +1,8 @@
 <script>
   import { get } from 'svelte/store';
-  import { activeConversationId, activeMessages, conversations, settings, effectiveModelId, isStreaming, chatError, chatCommand, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress, webSearchConnected, grokApiKey, togetherApiKey } from '$lib/stores.js';
+  import { activeConversationId, activeMessages, conversations, settings, effectiveModelId, isStreaming, chatError, chatCommand, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress, webSearchConnected, grokApiKey, deepinfraApiKey } from '$lib/stores.js';
   import { getMessages, addMessage, clearMessages, deleteMessage, getMessageCount } from '$lib/db.js';
-  import { streamChatCompletion, requestGrokImageGeneration, requestTogetherImageGeneration, isGrokModel, isDeepSeekModel } from '$lib/api.js';
+  import { streamChatCompletion, requestGrokImageGeneration, requestDeepInfraImageGeneration, requestDeepInfraVideoGeneration, isGrokModel, isDeepSeekModel } from '$lib/api.js';
   import { searchDuckDuckGo, formatSearchResultForChat } from '$lib/duckduckgo.js';
   import MessageList from '$lib/components/MessageList.svelte';
   import ChatInput from '$lib/components/ChatInput.svelte';
@@ -13,33 +13,77 @@
   let chatAbortController = $state(null);
   let imageGenerating = $state(false);
 
-  /** Image options modal (DeepSeek/Together flow): click Image → popup → choose engine, quality, size, n → Generate */
-  /** FLUX.1-schnell is serverless ($0.003/image). No dedicated endpoint needed. */
+  /** Image options modal. Verified config from docs/image-models-and-settings-for-verification.json (Together AI, 2026-02-15). Grok unchanged. */
   const ENGINE_OPTIONS = [
-    { label: 'FLUX.1-schnell (fastest, good quality)', model: 'black-forest-labs/FLUX.1-schnell' },
-    { label: 'FLUX.1-pro (highest quality, slower)', model: 'black-forest-labs/FLUX.1-pro' },
-    { label: 'Stable Diffusion XL (balanced)', model: 'stabilityai/stable-diffusion-xl-base-1.0' },
-    { label: 'DeepSeek-V3 (via Together)', model: 'deepseek-ai/DeepSeek-V3' },
+    { label: 'FLUX.1 Schnell', model: 'black-forest-labs/FLUX.1-schnell' },
+    { label: 'FLUX.1 Dev', model: 'black-forest-labs/FLUX.1-dev' },
+    { label: 'FLUX.1 Pro', model: 'black-forest-labs/FLUX.1-pro' },
   ];
-  const QUALITY_OPTIONS = [
-    { label: 'Draft (fast, 4 steps)', steps: 4 },
-    { label: 'Standard (balanced, 8 steps)', steps: 8 },
-    { label: 'High (best quality, 20+ steps)', steps: 20 },
+  const STEP_OPTIONS_PER_ENGINE = [
+    [{ label: 'Minimal', steps: 1 }, { label: 'Quick', steps: 2 }, { label: 'Standard', steps: 4 }],
+    [{ label: 'Quick', steps: 20 }, { label: 'Standard', steps: 25 }, { label: 'Detailed', steps: 30 }, { label: 'High Detail', steps: 50 }],
+    [{ label: 'Standard', steps: 25 }, { label: 'Detailed', steps: 30 }, { label: 'High Detail', steps: 50 }],
   ];
-  const SIZE_OPTIONS = [
-    { label: '512×512', width: 512, height: 512 },
-    { label: '768×768', width: 768, height: 768 },
-    { label: '1024×1024', width: 1024, height: 1024 },
-    { label: '1024×768 (landscape)', width: 1024, height: 768 },
-    { label: '768×1024 (portrait)', width: 768, height: 1024 },
+  const SIZE_OPTIONS_PER_ENGINE = [
+    [{ label: '1:1 Square', width: 1024, height: 1024 }, { label: 'Portrait', width: 1152, height: 896 }, { label: 'Landscape', width: 896, height: 1152 }, { label: 'Wide', width: 1280, height: 768 }],
+    [{ label: '1:1 Square', width: 1024, height: 1024 }, { label: 'Portrait', width: 1152, height: 896 }, { label: 'Wide', width: 1344, height: 768 }, { label: 'Panoramic', width: 1728, height: 1152 }],
+    [{ label: '1:1 Square', width: 1024, height: 1024 }, { label: 'Large Square', width: 2000, height: 2000 }, { label: '16:9 Widescreen', width: 1820, height: 1024 }],
   ];
   const N_OPTIONS = [1, 2, 4];
   let imageModalOpen = $state(false);
   let imageModalPrompt = $state('');
   let imageModalEngine = $state(0);
-  let imageModalQuality = $state(0);
-  let imageModalSize = $state(2);
-  let imageModalN = $state(1);
+  let imageModalQuality = $state(2);
+  let imageModalSize = $state(0);
+  let imageModalN = $state(0);
+  const imageModalQualityOptions = $derived(STEP_OPTIONS_PER_ENGINE[imageModalEngine] ?? STEP_OPTIONS_PER_ENGINE[0]);
+  const imageModalSizeOptions = $derived(SIZE_OPTIONS_PER_ENGINE[imageModalEngine] ?? SIZE_OPTIONS_PER_ENGINE[0]);
+  const canGenerateImage = $derived(imageModalPrompt.trim().length > 0);
+
+  /** DeepInfra model IDs (official docs). Our ENGINE_OPTIONS use dot (FLUX.1); DeepInfra uses hyphen (FLUX-1). */
+  const DEEPINFRA_MODEL_IDS = ['black-forest-labs/FLUX-1-schnell', 'black-forest-labs/FLUX-1-dev', 'black-forest-labs/FLUX-1-dev'];
+  const getDeepinfraImageKey = () => (get(deepinfraApiKey)?.trim() || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_DEEPINFRA_API_KEY) || '').trim();
+
+  /** Video modal (DeepInfra). Per spec: prompt only; no other params. */
+  const VIDEO_ENGINE_OPTIONS = [
+    { label: 'Wan2.1 1.3B', modelId: 'Wan-AI/Wan2.1-T2V-1.3B' },
+    { label: 'Wan2.1 14B', modelId: 'Wan-AI/Wan2.1-T2V-14B' },
+    { label: 'Pixverse HD', modelId: 'Pixverse/Pixverse-T2V-HD' },
+    { label: 'Veo 3.1 Fast', modelId: 'google/veo-3.1-fast' },
+  ];
+  let videoModalOpen = $state(false);
+  let videoModalPrompt = $state('');
+  let videoModalEngine = $state(0);
+  let videoGenerating = $state(false);
+  let videoGenStartMs = $state(0);
+  let videoGenElapsed = $state('');
+  let videoGenTimerId = $state(null);
+
+  $effect(() => {
+    if (videoGenerating) {
+      videoGenStartMs = Date.now();
+      videoGenElapsed = '0:00';
+      videoGenTimerId = setInterval(() => {
+        const sec = Math.floor((Date.now() - videoGenStartMs) / 1000);
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        videoGenElapsed = `${m}:${s.toString().padStart(2, '0')}`;
+      }, 1000);
+    } else {
+      if (videoGenTimerId) clearInterval(videoGenTimerId);
+      videoGenTimerId = null;
+      videoGenElapsed = '';
+    }
+  });
+
+  $effect(() => {
+    const qOpts = imageModalQualityOptions;
+    const qMax = qOpts.length - 1;
+    if (qMax >= 0 && imageModalQuality > qMax) imageModalQuality = qMax;
+    const sOpts = imageModalSizeOptions;
+    const sMax = sOpts.length - 1;
+    if (sMax >= 0 && imageModalSize > sMax) imageModalSize = sMax;
+  });
 
   async function loadMessages(id = convId) {
     if (!id) {
@@ -296,15 +340,15 @@
     }
   }
 
-  /** DeepSeek image flow: open options modal (do not call API yet). Separate code path; does not touch Grok. */
+  /** DeepSeek image flow: open options modal. Uses DeepInfra (single key for image + video). */
   function openImageOptionsModal(prompt) {
     if (!convId) {
       chatError.set('Start or select a conversation first.');
       return;
     }
-    const key = (get(togetherApiKey)?.trim() || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TOGETHER_API_KEY) || '').trim();
+    const key = getDeepinfraImageKey();
     if (!key) {
-      chatError.set('Together API key required. Set VITE_TOGETHER_API_KEY in .env or add it in Settings → Cloud APIs.');
+      chatError.set('DeepInfra API key required. Add it in Settings → Cloud APIs.');
       return;
     }
     chatError.set(null);
@@ -316,49 +360,118 @@
     imageModalOpen = false;
   }
 
-  /** Step 3: user clicked Generate in modal → call Together API with selected options → display images in chat. */
+  /** Generate image via DeepInfra (synchronous; response.images[0] base64 → data URL). */
   async function handleImageModalGenerate() {
     if (!convId || !imageModalPrompt.trim()) return;
-    const key = (get(togetherApiKey)?.trim() || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TOGETHER_API_KEY) || '').trim();
+    const key = getDeepinfraImageKey();
     if (!key) {
-      chatError.set('Together API key required.');
+      chatError.set('DeepInfra API key required.');
       return;
     }
-    const engine = ENGINE_OPTIONS[imageModalEngine];
-    const quality = QUALITY_OPTIONS[imageModalQuality];
-    const size = SIZE_OPTIONS[imageModalSize];
+    const modelId = DEEPINFRA_MODEL_IDS[imageModalEngine] ?? DEEPINFRA_MODEL_IDS[0];
+    const qualityOpts = STEP_OPTIONS_PER_ENGINE[imageModalEngine] ?? STEP_OPTIONS_PER_ENGINE[0];
+    const quality = qualityOpts[Math.min(imageModalQuality, qualityOpts.length - 1)] ?? qualityOpts[0];
+    const sizeOpts = SIZE_OPTIONS_PER_ENGINE[imageModalEngine] ?? SIZE_OPTIONS_PER_ENGINE[0];
+    const size = sizeOpts[Math.min(imageModalSize, sizeOpts.length - 1)] ?? sizeOpts[0];
     const n = N_OPTIONS[imageModalN] ?? 1;
-    const modelForRequest = engine?.model || 'black-forest-labs/FLUX.1-schnell';
     closeImageModal();
     imageGenerating = true;
     chatError.set(null);
     try {
-      const data = await requestTogetherImageGeneration({
-        prompt: imageModalPrompt,
+      const data = await requestDeepInfraImageGeneration({
         apiKey: key,
-        model: modelForRequest,
-        width: size?.width ?? 1024,
-        height: size?.height ?? 1024,
-        steps: quality?.steps ?? 4,
-        n,
+        modelId,
+        prompt: imageModalPrompt,
+        num_images: n,
+        num_inference_steps: quality?.steps ?? 4,
+        guidance_scale: 7.5,
+        width: size.width ?? 1024,
+        height: size.height ?? 1024,
       });
       const urls = data?.data?.map((d) => d?.url).filter(Boolean) ?? [];
       if (urls.length === 0) {
-        chatError.set('Image generation failed—no URLs returned.');
+        chatError.set('Image generation failed—no images returned.');
         return;
       }
-      const modelId = get(effectiveModelId);
+      const modelIdEffective = get(effectiveModelId);
+      const imageUrlsToStore = [...urls];
       await addMessage(convId, {
         role: 'assistant',
         content: 'Generated images for your prompt.',
-        imageUrls: urls,
-        modelId: modelId || 'deepseek:deepseek-chat',
+        imageUrls: imageUrlsToStore,
+        modelId: modelIdEffective || 'deepseek:deepseek-chat',
       });
       await loadMessages();
     } catch (err) {
       chatError.set(err?.message ?? 'Image generation failed.');
     } finally {
       imageGenerating = false;
+    }
+  }
+
+  /** Video: open modal (prompt + model). */
+  function openVideoModal(prompt) {
+    if (!convId) {
+      chatError.set('Start or select a conversation first.');
+      return;
+    }
+    const key = getDeepinfraImageKey();
+    if (!key) {
+      chatError.set('DeepInfra API key required. Add it in Settings → Cloud APIs.');
+      return;
+    }
+    chatError.set(null);
+    videoModalPrompt = (prompt || '').trim() || '';
+    videoModalOpen = true;
+  }
+
+  function closeVideoModal() {
+    videoModalOpen = false;
+  }
+
+  /** Generate video via DeepInfra (synchronous; response.video_url or response.videos → full URL). */
+  async function handleVideoModalGenerate() {
+    if (!convId || !videoModalPrompt.trim()) return;
+    const key = getDeepinfraImageKey();
+    if (!key) {
+      chatError.set('DeepInfra API key required.');
+      return;
+    }
+    const engine = VIDEO_ENGINE_OPTIONS[videoModalEngine];
+    const modelId = engine?.modelId ?? VIDEO_ENGINE_OPTIONS[0].modelId;
+    closeVideoModal();
+    videoGenerating = true;
+    chatError.set(null);
+    try {
+      // DeepInfra video: ONLY prompt. Do not pass width, height, duration, negative_prompt, or any other field.
+      const data = await requestDeepInfraVideoGeneration({
+        apiKey: key,
+        modelId,
+        prompt: videoModalPrompt,
+      });
+      const videoUrl = data?.videoUrl;
+      if (!videoUrl) {
+        chatError.set('Video generation failed—no video URL returned.');
+        return;
+      }
+      const elapsedSec = Math.round((Date.now() - videoGenStartMs) / 1000);
+      const elapsedMin = Math.floor(elapsedSec / 60);
+      const elapsedRemSec = elapsedSec % 60;
+      const elapsedStr = elapsedMin > 0
+        ? `${elapsedMin}m ${elapsedRemSec}s`
+        : `${elapsedSec}s`;
+      const modelIdEffective = get(effectiveModelId);
+      await addMessage(convId, {
+        role: 'assistant',
+        content: `Generated video (${elapsedStr}).`,
+        videoUrls: [String(videoUrl)],
+        modelId: modelIdEffective || 'deepseek:deepseek-chat',
+      });
+      await loadMessages();
+    } catch (err) {
+      chatError.set(err?.message ?? 'Video generation failed.');
+    } finally {
+      videoGenerating = false;
     }
   }
 </script>
@@ -417,7 +530,7 @@
             class="w-full rounded border px-3 py-2 text-sm"
             style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
           >
-            {#each QUALITY_OPTIONS as opt, i}
+            {#each imageModalQualityOptions as opt, i}
               <option value={i}>{opt.label}</option>
             {/each}
           </select>
@@ -430,7 +543,7 @@
             class="w-full rounded border px-3 py-2 text-sm"
             style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
           >
-            {#each SIZE_OPTIONS as opt, i}
+            {#each imageModalSizeOptions as opt, i}
               <option value={i}>{opt.label}</option>
             {/each}
           </select>
@@ -460,8 +573,62 @@
             class="px-4 py-2 rounded-lg text-sm font-medium"
             style="background: var(--ui-accent); color: var(--ui-bg-main);"
             onclick={handleImageModalGenerate}
-            disabled={imageGenerating || !imageModalPrompt.trim()}
+            disabled={imageGenerating || !canGenerateImage}
           >{imageGenerating ? 'Generating…' : 'Generate'}</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+  <!-- Video options modal (DeepInfra): prompt + model → Generate -->
+  {#if videoModalOpen}
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style="background: rgba(0,0,0,0.5);"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="video-modal-title"
+    >
+      <div class="w-full max-w-md rounded-xl shadow-xl p-5 flex flex-col gap-4" style="background: var(--ui-bg-main); border: 1px solid var(--ui-border);">
+        <h2 id="video-modal-title" class="text-lg font-semibold" style="color: var(--ui-text-primary);">Generate video</h2>
+        <div>
+          <label for="video-modal-prompt" class="block text-sm font-medium mb-1" style="color: var(--ui-text-secondary);">Prompt</label>
+          <textarea
+            id="video-modal-prompt"
+            bind:value={videoModalPrompt}
+            rows="3"
+            class="w-full rounded border px-3 py-2 text-sm resize-none"
+            style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
+            placeholder="Describe the video you want"
+          ></textarea>
+        </div>
+        <div>
+          <label for="video-modal-engine" class="block text-sm font-medium mb-1" style="color: var(--ui-text-secondary);">Model</label>
+          <select
+            id="video-modal-engine"
+            bind:value={videoModalEngine}
+            class="w-full rounded border px-3 py-2 text-sm"
+            style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-primary);"
+          >
+            {#each VIDEO_ENGINE_OPTIONS as opt, i}
+              <option value={i}>{opt.label}</option>
+            {/each}
+          </select>
+        </div>
+        <p class="text-xs" style="color: var(--ui-text-secondary);">Video can take 5–10+ minutes. Please wait—do not close the tab.</p>
+        <div class="flex gap-2 justify-end pt-2">
+          <button
+            type="button"
+            class="px-4 py-2 rounded-lg text-sm font-medium"
+            style="background: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary);"
+            onclick={closeVideoModal}
+          >Cancel</button>
+          <button
+            type="button"
+            class="px-4 py-2 rounded-lg text-sm font-medium"
+            style="background: var(--ui-accent); color: var(--ui-bg-main);"
+            onclick={handleVideoModalGenerate}
+            disabled={videoGenerating || !videoModalPrompt.trim()}
+          >{videoGenerating ? 'Generating…' : 'Generate'}</button>
         </div>
       </div>
     </div>
@@ -485,8 +652,11 @@
               onSend={sendUserMessage}
               onStop={() => chatAbortController?.abort?.()}
               onGenerateImageGrok={$effectiveModelId && isGrokModel($effectiveModelId) && $grokApiKey?.trim() ? handleGrokImage : undefined}
-              onGenerateImageDeepSeek={$effectiveModelId && isDeepSeekModel($effectiveModelId) && (($togetherApiKey?.trim()) || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TOGETHER_API_KEY)) ? openImageOptionsModal : undefined}
+              onGenerateImageDeepSeek={$effectiveModelId && isDeepSeekModel($effectiveModelId) && getDeepinfraImageKey() ? openImageOptionsModal : undefined}
+              onGenerateVideoDeepSeek={$effectiveModelId && isDeepSeekModel($effectiveModelId) && getDeepinfraImageKey() ? openVideoModal : undefined}
               imageGenerating={imageGenerating}
+              videoGenerating={videoGenerating}
+              videoGenElapsed={videoGenElapsed}
               placeholder="Ask anything. Type or paste here... (Ctrl+Enter to send)"
             />
           </div>
@@ -514,8 +684,11 @@
             onSend={sendUserMessage}
             onStop={() => chatAbortController?.abort?.()}
             onGenerateImageGrok={$effectiveModelId && isGrokModel($effectiveModelId) && $grokApiKey?.trim() ? handleGrokImage : undefined}
-            onGenerateImageDeepSeek={$effectiveModelId && isDeepSeekModel($effectiveModelId) && (($togetherApiKey?.trim()) || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TOGETHER_API_KEY)) ? openImageOptionsModal : undefined}
+            onGenerateImageDeepSeek={$effectiveModelId && isDeepSeekModel($effectiveModelId) && getDeepinfraImageKey() ? openImageOptionsModal : undefined}
+            onGenerateVideoDeepSeek={$effectiveModelId && isDeepSeekModel($effectiveModelId) && getDeepinfraImageKey() ? openVideoModal : undefined}
             imageGenerating={imageGenerating}
+            videoGenerating={videoGenerating}
+            videoGenElapsed={videoGenElapsed}
           />
         </div>
       </div>

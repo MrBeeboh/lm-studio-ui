@@ -7,7 +7,7 @@
   import { pdfToImageDataUrls } from '$lib/pdfToImages.js';
   import { videoToFrames } from '$lib/videoToFrames.js';
 
-  let { onSend, onStop, onGenerateImageGrok, onGenerateImageDeepSeek, imageGenerating = false, placeholder: placeholderOverride = undefined } = $props();
+  let { onSend, onStop, onGenerateImageGrok, onGenerateImageDeepSeek, onGenerateVideoDeepSeek, imageGenerating = false, videoGenerating = false, videoGenElapsed = '', placeholder: placeholderOverride = undefined } = $props();
   const placeholderText = $derived(placeholderOverride ?? 'Type your message or drop/paste images, video, or PDFs... (Ctrl+Enter to send)');
   let text = $state('');
   let textareaEl = $state(null);
@@ -203,6 +203,11 @@
         result.then(() => { text = ''; }).catch(() => {});
       }
     }
+  }
+
+  function handleVideoClick() {
+    const fn = typeof onGenerateVideoDeepSeek === 'function' ? onGenerateVideoDeepSeek : null;
+    if (fn) fn(text.trim() || '');
   }
 
   function addImageDataUrls(dataUrls, label) {
@@ -562,33 +567,54 @@
       placeholder={placeholderText}
       rows="1"
     ></textarea>
+    {#if onGenerateImageGrok || onGenerateImageDeepSeek || onGenerateVideoDeepSeek}
+      <div class="media-toolbar">
+        {#if onGenerateImageGrok || onGenerateImageDeepSeek}
+          <button
+            type="button"
+            class="media-icon-btn"
+            disabled={$isStreaming || imageGenerating || !text.trim()}
+            onclick={handleImageClick}
+            title={imageGenerating ? 'Generating image…' : (onGenerateImageGrok ? 'Generate image (Grok)' : 'Generate image (DeepInfra)')}
+            aria-label={imageGenerating ? 'Generating image' : 'Generate image'}
+          >
+            {#if imageGenerating}
+              <ThinkingAtom size={16} />
+            {:else}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+            {/if}
+          </button>
+        {/if}
+        {#if onGenerateVideoDeepSeek}
+          <button
+            type="button"
+            class="media-icon-btn"
+            disabled={$isStreaming || videoGenerating}
+            onclick={handleVideoClick}
+            title={videoGenerating ? `Generating video… ${videoGenElapsed}` : 'Generate video (DeepInfra)'}
+            aria-label={videoGenerating ? 'Generating video' : 'Generate video'}
+          >
+            {#if videoGenerating}
+              <span class="media-icon-generating"><ThinkingAtom size={16} /><span class="media-elapsed">{videoGenElapsed}</span></span>
+            {:else}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="2" y="4" width="20" height="16" rx="2"/>
+                <polygon points="10 9 15 12 10 15"/>
+              </svg>
+            {/if}
+          </button>
+        {/if}
+      </div>
+    {/if}
   </div>
 
   {#if $isStreaming && onStop}
     <button type="button" class="send-button" style="background: var(--ui-accent-hot, #dc2626);" onclick={() => onStop()} title="Stop">Stop</button>
   {:else}
-    {#if onGenerateImageGrok || onGenerateImageDeepSeek}
-      <button
-        type="button"
-        class="image-gen-button"
-        disabled={$isStreaming || imageGenerating || !text.trim()}
-        onclick={handleImageClick}
-        title={onGenerateImageGrok ? 'Generate image (Grok)' : 'Generate image (DeepSeek / Together)'}
-      >
-        {#if imageGenerating}
-          <span class="image-gen-button-inner"><ThinkingAtom size={14} />Generating…</span>
-        {:else}
-          <span class="image-gen-button-inner">
-            {#if onGenerateImageGrok}
-              <img src="/model-icons/grok-ai-icon.webp" alt="Grok" class="image-gen-icon" aria-hidden="true" />
-            {:else}
-              <img src="/model-icons/deepseek-color.svg" alt="DeepSeek" class="image-gen-icon" aria-hidden="true" />
-            {/if}
-            Image
-          </span>
-        {/if}
-      </button>
-    {/if}
     <button
       onclick={handleSubmit}
       disabled={($isStreaming || $webSearchInProgress || (!text.trim() && attachments.length === 0)) ? true : null}
@@ -629,7 +655,6 @@
   .chat-input-container > .attach-button-wrap,
   .chat-input-container > .mic-button,
   .chat-input-container > .web-search-button,
-  .chat-input-container > .image-gen-button,
   .chat-input-container > .send-button {
     flex-shrink: 0;
     height: 44px;
@@ -685,38 +710,50 @@
     transform: none;
   }
 
-  .image-gen-button {
-    padding: 12px 20px;
-    min-height: 44px;
-    background: var(--ui-input-bg, #fff);
-    color: var(--ui-text-primary, #111);
-    border: 2px solid var(--ui-border, #e5e7eb);
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: border-color 150ms, background 150ms;
+  .media-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px 2px;
+    border-top: 1px solid color-mix(in srgb, var(--ui-border, #e5e7eb) 50%, transparent);
   }
 
-  .image-gen-button-inner {
+  .media-icon-btn {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--ui-text-secondary, #6b7280);
+    cursor: pointer;
+    transition: background 120ms, color 120ms;
+    padding: 0 4px;
   }
 
-  .image-gen-icon {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
+  .media-icon-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--ui-accent, #3b82f6) 12%, transparent);
+    color: var(--ui-accent, #3b82f6);
   }
 
-  .image-gen-button:hover:not(:disabled) {
-    border-color: var(--ui-accent, #3b82f6);
-    background: color-mix(in srgb, var(--ui-accent, #3b82f6) 8%, var(--ui-input-bg, #fff));
-  }
-
-  .image-gen-button:disabled {
-    opacity: 0.5;
+  .media-icon-btn:disabled {
+    opacity: 0.4;
     cursor: not-allowed;
+  }
+
+  .media-icon-generating {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .media-elapsed {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--ui-accent, #3b82f6);
+    font-variant-numeric: tabular-nums;
   }
 
   .mic-button {

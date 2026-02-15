@@ -1,7 +1,7 @@
 <script>
   import { fly } from 'svelte/transition';
   import { backOut, quintOut } from 'svelte/easing';
-  import { globalDefault, updateGlobalDefault, selectedModelId, models, presetDefaultModels, lmStudioBaseUrl, voiceServerUrl, lmStudioUnloadHelperUrl, deepSeekApiKey, grokApiKey, togetherApiKey } from '$lib/stores.js';
+  import { globalDefault, updateGlobalDefault, selectedModelId, models, presetDefaultModels, lmStudioBaseUrl, voiceServerUrl, lmStudioUnloadHelperUrl, deepSeekApiKey, grokApiKey, togetherApiKey, deepinfraApiKey } from '$lib/stores.js';
 
   let { onclose } = $props();
 
@@ -154,7 +154,18 @@
             <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Get a key at <a href="https://console.x.ai" target="_blank" rel="noopener noreferrer" class="underline">console.x.ai</a>. Models: grok-3, grok-3-mini, grok-4, grok-4-1-fast-reasoning.</p>
           </div>
           <div>
-            <label for="settings-together-key" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400">Together AI API key (image when DeepSeek)</label>
+            <label for="settings-deepinfra-key" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400">DeepInfra API key (image + video when DeepSeek)</label>
+            <input
+              id="settings-deepinfra-key"
+              type="password"
+              autocomplete="off"
+              bind:value={$deepinfraApiKey}
+              placeholder="…"
+              class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm font-mono placeholder:text-zinc-400" />
+            <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Used when DeepSeek is selected for Image and Video generation. Get a key at <a href="https://deepinfra.com" target="_blank" rel="noopener noreferrer" class="underline">deepinfra.com</a>. Env: <code>VITE_DEEPINFRA_API_KEY</code>.</p>
+          </div>
+          <div>
+            <label for="settings-together-key" class="block text-sm font-medium text-zinc-600 dark:text-zinc-400">Together AI API key (legacy image when DeepSeek)</label>
             <input
               id="settings-together-key"
               type="password"
@@ -162,7 +173,7 @@
               bind:value={$togetherApiKey}
               placeholder="…"
               class="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 text-sm font-mono placeholder:text-zinc-400" />
-            <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Used only when DeepSeek is selected and you click Image (separate endpoint; DeepSeek has no native image API). Get a key at <a href="https://api.together.xyz" target="_blank" rel="noopener noreferrer" class="underline">api.together.xyz</a>.</p>
+            <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Legacy: image when DeepSeek. Prefer DeepInfra key above. Get a key at <a href="https://api.together.xyz" target="_blank" rel="noopener noreferrer" class="underline">api.together.xyz</a>.</p>
           </div>
         </div>
       </div>
