@@ -638,7 +638,6 @@
       <!-- Greeting: ATOM branding, headline, gradient divider, input (power-user tone) -->
       <div class="ui-splash-wrap flex-1 flex flex-col items-center justify-center px-4 py-8 min-h-0">
         <div class="w-full max-w-[min(52rem,92%)] mx-auto flex flex-col items-center">
-          <div class="ui-splash-branding flex items-center justify-center gap-2 mb-2" aria-hidden="true"><AtomLogo size={32} /><span>ATOM</span></div>
           <h1 class="ui-greeting-title text-2xl md:text-3xl font-semibold mb-8 text-center" style="color: var(--ui-text-primary);">What can I help with?</h1>
           {#if $chatError}
             <div class="mb-4 w-full px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm flex items-center justify-between gap-2">
@@ -663,16 +662,16 @@
         </div>
       </div>
     {:else}
-      <!-- After first message: messages above, input fixed at bottom (same width as message list) -->
-      <div class="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-zinc-200/60 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/30">
+      <!-- After first message: messages above, input fixed at bottom -->
+      <div class="shrink-0 flex items-center gap-2 px-4 py-1.5 border-b" style="border-color: var(--ui-border); background: color-mix(in srgb, var(--ui-bg-sidebar) 50%, var(--ui-bg-main));">
         <div class="max-w-[min(52rem,92%)] mx-auto w-full flex flex-wrap items-center gap-2">
-          <button type="button" class="text-xs px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 transition-colors" onclick={clearChat} title="Clear all messages">Clear</button>
+          <button type="button" class="text-xs px-2.5 py-1.5 rounded-lg border transition-colors" style="border-color: var(--ui-border); color: var(--ui-text-secondary); background: var(--ui-input-bg);" onclick={clearChat} title="Clear all messages">Clear</button>
         </div>
       </div>
       <div class="flex-1 overflow-y-auto min-h-0">
         <MessageList />
       </div>
-      <div class="shrink-0 border-t border-zinc-200/60 dark:border-zinc-800/80 p-4" style="background-color: var(--ui-bg-main);">
+      <div class="shrink-0 p-4 chat-input-dock" style="background-color: var(--ui-bg-main); border-top: 1px solid var(--ui-border);">
         <div class="max-w-[min(52rem,92%)] mx-auto w-full">
           {#if $chatError}
             <div class="mb-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm flex items-center justify-between gap-2">

@@ -111,7 +111,7 @@
   <div class="relative" role="combobox" aria-expanded={open} aria-haspopup="listbox" aria-controls="model-listbox" aria-label="Select model" bind:this={triggerEl}>
     <button
       type="button"
-      class="flex items-center gap-2 rounded-lg border text-sm px-3 py-2 max-w-[260px] focus:ring-2 focus:ring-offset-1 font-semibold min-h-[44px] transition-colors duration-150 ui-model-selector {open ? 'ui-model-selector-open' : ''}"
+      class="flex items-center gap-2 rounded-lg border text-sm px-3 py-2 max-w-[420px] focus:ring-2 focus:ring-offset-1 font-semibold min-h-[44px] transition-colors duration-150 ui-model-selector {open ? 'ui-model-selector-open' : ''}"
       style="background-color: var(--ui-input-bg); color: var(--ui-text-primary); border-color: var(--ui-border);"
       onclick={toggle}
       onkeydown={(e) => e.key === 'Escape' && (open = false)}

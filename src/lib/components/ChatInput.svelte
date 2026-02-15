@@ -581,11 +581,13 @@
             {#if imageGenerating}
               <ThinkingAtom size={16} />
             {:else}
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="2.5" y="2.5" width="19" height="19" rx="3" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="8" cy="8" r="2" fill="currentColor" opacity="0.5"/>
+                <path d="M2.5 16l5-5.5 3.5 3.5 3-3L21.5 16v3.5a3 3 0 0 1-3 3h-13a3 3 0 0 1-3-3V16z" fill="currentColor" opacity="0.2"/>
+                <path d="M2.5 16l5-5.5 3.5 3.5 3-3L21.5 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
+              <span class="media-icon-label">Image</span>
             {/if}
           </button>
         {/if}
@@ -593,7 +595,7 @@
           <button
             type="button"
             class="media-icon-btn"
-            disabled={$isStreaming || videoGenerating}
+            disabled={$isStreaming || videoGenerating || !text.trim()}
             onclick={handleVideoClick}
             title={videoGenerating ? `Generating video… ${videoGenElapsed}` : 'Generate video (DeepInfra)'}
             aria-label={videoGenerating ? 'Generating video' : 'Generate video'}
@@ -601,10 +603,12 @@
             {#if videoGenerating}
               <span class="media-icon-generating"><ThinkingAtom size={16} /><span class="media-elapsed">{videoGenElapsed}</span></span>
             {:else}
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="2" y="4" width="20" height="16" rx="2"/>
-                <polygon points="10 9 15 12 10 15"/>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="2.5" y="3.5" width="19" height="17" rx="3" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M10 8.5v7l5.5-3.5L10 8.5z" fill="currentColor" opacity="0.35"/>
+                <path d="M10 8.5v7l5.5-3.5L10 8.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
+              <span class="media-icon-label">Video</span>
             {/if}
           </button>
         {/if}
@@ -662,24 +666,40 @@
     align-self: flex-start;
   }
 
-  textarea {
+  .chat-input-main {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border: 2px solid var(--ui-input-border, var(--ui-border, #e5e7eb));
+    border-radius: 12px;
+    background-color: var(--ui-input-bg, #fff);
+    transition: border-color 150ms, box-shadow 150ms;
+    overflow: hidden;
+  }
+
+  .chat-input-main:focus-within {
+    border-color: var(--ui-accent, #3b82f6);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-accent, #3b82f6) 12%, transparent);
+  }
+
+  textarea {
+    flex: 0 0 auto;
+    width: 100%;
     padding: 12px;
-    border: 2px solid var(--ui-border, #e5e7eb);
-    border-radius: 8px;
+    border: none;
     font-family: inherit;
     font-size: 14px;
     resize: none;
     min-height: 72px;
     max-height: 200px;
     overflow-y: auto;
-    background-color: var(--ui-input-bg, #fff);
+    background: transparent;
     color: var(--ui-text-primary, #111);
   }
 
   textarea:focus {
     outline: none;
-    border-color: var(--ui-accent, #3b82f6);
   }
 
   textarea:disabled {
@@ -713,34 +733,40 @@
   .media-toolbar {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 6px 2px;
+    gap: 6px;
+    padding: 4px 8px 6px;
+    flex-shrink: 0;
     border-top: 1px solid color-mix(in srgb, var(--ui-border, #e5e7eb) 50%, transparent);
   }
 
   .media-icon-btn {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-width: 32px;
-    height: 32px;
+    gap: 5px;
+    height: 28px;
     border-radius: 6px;
     border: none;
     background: transparent;
     color: var(--ui-text-secondary, #6b7280);
     cursor: pointer;
     transition: background 120ms, color 120ms;
-    padding: 0 4px;
+    padding: 0 8px;
   }
 
   .media-icon-btn:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--ui-accent, #3b82f6) 12%, transparent);
+    background: color-mix(in srgb, var(--ui-accent, #3b82f6) 10%, transparent);
     color: var(--ui-accent, #3b82f6);
   }
 
   .media-icon-btn:disabled {
-    opacity: 0.4;
+    opacity: 0.3;
     cursor: not-allowed;
+  }
+
+  .media-icon-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
   }
 
   .media-icon-generating {
@@ -999,13 +1025,6 @@
   @keyframes web-search-dot-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
-  }
-  .chat-input-main {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
   }
   .attachments-row {
     display: flex;

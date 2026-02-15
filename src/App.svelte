@@ -28,7 +28,7 @@
     { value: 'cockpit', label: 'Cockpit' },
     { value: 'arena', label: 'Arena' },
   ];
-  const HEADER_MODEL_MIN = 'min-width: 13rem;';
+  const HEADER_MODEL_MIN = 'min-width: 22rem;';
   const HEADER_PRESET_MIN = 'min-width: 7rem;';
   const HEADER_THEME_MIN = 'min-width: 10rem;';
   const HEADER_GROUP_GAP = 'gap: 0.75rem;';
@@ -147,36 +147,34 @@
 
   {#if $layout === 'cockpit'}
     <div class="flex h-full flex-col">
-      <!-- Cockpit header: symmetrical two-column layout (left and right equal weight) -->
+      <!-- Cockpit header: 3-zone layout — left (brand+layout), center (model+preset), right (theme+status) -->
       <header class="cockpit-header shrink-0 flex items-center px-4 py-2.5 border-b" style="border-color: var(--ui-border); background-color: var(--ui-bg-sidebar);">
-        <div class="cockpit-header-half flex-1 flex items-center gap-4 min-w-0 justify-start">
-          <div class="cockpit-header-group flex items-center gap-2 shrink-0 rounded-lg pl-2.5 pr-2.5 py-1.5" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent);" role="group" aria-label="Brand and layout">
-            <span class="flex items-center gap-1.5 font-semibold shrink-0" style="color: var(--ui-accent);"><AtomLogo size={20} />ATOM</span>
-            <span class="text-xs font-semibold uppercase tracking-wider shrink-0" style="color: var(--ui-text-secondary);">Layout</span>
-            <nav class="flex items-center gap-0.5 shrink-0" aria-label="Layout">
-              {#each LAYOUT_OPTS as opt}
-                <button type="button" class="cockpit-header-btn h-8 px-2.5 rounded-md text-xs font-semibold shrink-0 transition-opacity hover:opacity-90" style="border: 1px solid {$layout === opt.value ? 'var(--ui-accent)' : 'var(--ui-border)'}; background: {$layout === opt.value ? 'color-mix(in srgb, var(--ui-accent) 14%, transparent)' : 'var(--ui-input-bg)'}; color: {$layout === opt.value ? 'var(--ui-accent)' : 'var(--ui-text-primary)'};" onclick={() => layout.set(opt.value)}>{opt.label}</button>
-              {/each}
-            </nav>
-          </div>
-          <span class="w-px h-6 rounded-full shrink-0" style="background: var(--ui-border);" aria-hidden="true"></span>
-          <div class="cockpit-header-group flex items-center gap-2 shrink-0 rounded-lg pl-2.5 pr-2.5 py-1.5 overflow-hidden" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent);" role="group" aria-label="Model and preset">
+        <!-- Left: brand + layout toggle -->
+        <div class="flex items-center gap-2 shrink-0" role="group" aria-label="Brand and layout">
+          <span class="flex items-center gap-1.5 font-semibold shrink-0" style="color: var(--ui-accent);"><AtomLogo size={20} />ATOM</span>
+          <nav class="flex items-center gap-0.5 shrink-0" aria-label="Layout">
+            {#each LAYOUT_OPTS as opt}
+              <button type="button" class="cockpit-header-btn h-7 px-2 rounded-md text-xs font-semibold shrink-0 transition-opacity hover:opacity-90" style="border: 1px solid {$layout === opt.value ? 'var(--ui-accent)' : 'var(--ui-border)'}; background: {$layout === opt.value ? 'color-mix(in srgb, var(--ui-accent) 14%, transparent)' : 'var(--ui-input-bg)'}; color: {$layout === opt.value ? 'var(--ui-accent)' : 'var(--ui-text-primary)'};" onclick={() => layout.set(opt.value)}>{opt.label}</button>
+            {/each}
+          </nav>
+        </div>
+        <!-- Center: model selector + preset — flexes to fill, centered -->
+        <div class="flex-1 flex items-center justify-center gap-3 min-w-0 px-4">
+          <div class="cockpit-header-group flex items-center gap-2 rounded-lg pl-2.5 pr-2.5 py-1.5 min-w-0" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent);" role="group" aria-label="Model and preset">
             <span class="text-xs font-semibold uppercase tracking-wider shrink-0" style="color: var(--ui-text-secondary);">Model</span>
-            <div class="shrink-0 overflow-hidden min-w-0" style="{HEADER_MODEL_MIN}"><ModelSelector /></div>
+            <div class="min-w-0" style="{HEADER_MODEL_MIN}"><ModelSelector /></div>
             <div class="shrink-0" style="{HEADER_PRESET_MIN}"><PresetSelect compact={true} /></div>
           </div>
         </div>
-        <div class="cockpit-header-half flex-1 flex items-center gap-4 min-w-0 justify-end">
-          <div class="cockpit-header-group flex items-center gap-2 shrink-0 rounded-lg pl-2.5 pr-2.5 py-1.5" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent); {HEADER_THEME_MIN}" role="group" aria-label="Appearance">
-            <span class="text-xs font-semibold uppercase tracking-wider shrink-0" style="color: var(--ui-text-secondary);">Appearance</span>
+        <!-- Right: theme + status -->
+        <div class="flex items-center gap-3 shrink-0">
+          <div class="flex items-center gap-2 shrink-0 rounded-lg pl-2.5 pr-2.5 py-1.5" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent);" role="group" aria-label="Appearance">
             <UiThemeSelect compact={true} />
             <ThemeToggle />
           </div>
-          <span class="w-px h-6 rounded-full shrink-0" style="background: var(--ui-border);" aria-hidden="true"></span>
-          <div class="cockpit-header-group flex items-center gap-2 shrink-0 rounded-lg pl-2.5 pr-2.5 py-1.5" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent);" role="group" aria-label="Status">
-            <span class="text-xs font-semibold uppercase tracking-wider shrink-0" style="color: var(--ui-text-secondary);">Status</span>
-            <span class="flex items-center gap-1.5 shrink-0 text-xs" style="color: var(--ui-text-primary);" title={lmStatusMessage} aria-label={lmStatusMessage}>
-              <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? ($cloudApisAvailable ? '#3b82f6' : '#ef4444') : '#94a3b8'};" aria-hidden="true"></span>
+          <div class="flex items-center gap-1.5 shrink-0 rounded-lg pl-2.5 pr-3 py-1.5" style="background: color-mix(in srgb, {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? ($cloudApisAvailable ? '#3b82f6' : '#ef4444') : '#94a3b8'} 8%, transparent);" role="group" aria-label="Status">
+            <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? ($cloudApisAvailable ? '#3b82f6' : '#ef4444') : '#94a3b8'};" aria-hidden="true"></span>
+            <span class="text-xs font-medium shrink-0" style="color: var(--ui-text-primary);" title={lmStatusMessage} aria-label={lmStatusMessage}>
               <span class="hidden sm:inline">{lmStatusMessage}</span>
             </span>
           </div>
