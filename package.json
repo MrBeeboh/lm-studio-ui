@@ -22,13 +22,13 @@
     "svelte": "^5.43.8",
     "svelte-eslint-parser": "^0.43.0",
     "tailwindcss": "^4.1.18",
-    "vite": "^7.2.4",
     "vitest": "^2.1.4"
   },
   "dependencies": {
     "dexie": "^4.3.0",
     "highlight.js": "^11.11.1",
     "marked": "^17.0.1",
-    "pdfjs-dist": "^5.4.624"
+    "pdfjs-dist": "^5.4.624",
+    "vite": "^7.3.1"
   }
 }

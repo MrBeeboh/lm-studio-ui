@@ -106,3 +106,145 @@ export function groupByDate(conversations) {
   }
   return groups;
 }
+
+/**
+ * Svelte action: make the panel draggable by its handle. Handle must be a direct child of the panel.
+ * Updates getPos/setPos and persists to localStorage on drag end; clamps to viewport.
+ * @param {HTMLElement} handleEl - The drag handle element
+ * @param {object} params - Configuration parameters
+ * @param {string} params.storageKey - localStorage key for saving position
+ * @param {function} params.getPos - Function returning current position {x, y}
+ * @param {function} params.setPos - Function to update position {x, y}
+ * @returns {{destroy: function}} Svelte action lifecycle object
+ */
+export function makeDraggable(handleEl, params) {
+  if (!params || !handleEl) return;
+  const { storageKey, getPos, setPos } = params;
+  const panelEl = handleEl.parentElement;
+  if (!panelEl) return;
+
+  let dragging = false;
+  function move(e) {
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    setPos({ x: startLeft + dx, y: startTop + dy });
+  }
+  function up() {
+    dragging = false;
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    const pos = getPos();
+    const rect = panelEl.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const x = Math.max(0, Math.min(vw - rect.width, pos.x));
+    const y = Math.max(0, Math.min(vh - rect.height, pos.y));
+    setPos({ x, y });
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(storageKey, JSON.stringify({ x, y }));
+  }
+  let startX, startY, startLeft, startTop;
+  function down(e) {
+    if (e.button !== 0) return;
+    if (e.target && e.target.closest && e.target.closest("button")) return;
+    e.preventDefault();
+    startX = e.clientX;
+    startY = e.clientY;
+    const p = getPos();
+    startLeft = p.x;
+    startTop = p.y;
+    dragging = true;
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  }
+  handleEl.addEventListener("pointerdown", down);
+  return {
+    destroy() {
+      handleEl.removeEventListener("pointerdown", down);
+      // Always clean up document listeners on destroy (prevents leaks if destroyed mid-drag)
+      if (dragging) {
+        document.removeEventListener("pointermove", move);
+        document.removeEventListener("pointerup", up);
+      }
+    },
+  };
+}
+
+/**
+ * Svelte action: make an element resizable by dragging its edges or corners.
+ * Updates getSize/setSize and persists to localStorage on resize end.
+ * @param {HTMLElement} element - The element to make resizable
+ * @param {object} params - Configuration parameters
+ * @param {string} params.storageKey - localStorage key for saving size
+ * @param {function} params.getSize - Function returning current size {w, h}
+ * @param {function} params.setSize - Function to update size {w, h}
+ * @param {number} params.minWidth - Minimum width (default: 100)
+ * @param {number} params.minHeight - Minimum height (default: 60)
+ * @returns {{destroy: function}} Svelte action lifecycle object
+ */
+export function makeResizable(element, params) {
+  if (!params || !element) return;
+  const { storageKey, getSize, setSize, minWidth = 100, minHeight = 60 } = params;
+
+  let resizing = false;
+  let startX, startY, startWidth, startHeight;
+  
+  function move(e) {
+    if (!resizing) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    const newWidth = Math.max(minWidth, startWidth + dx);
+    const newHeight = Math.max(minHeight, startHeight + dy);
+    setSize({ w: newWidth, h: newHeight });
+  }
+  
+  function up() {
+    resizing = false;
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    const size = getSize();
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(storageKey, JSON.stringify(size));
+    }
+  }
+  
+  function down(e) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    resizing = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    const size = getSize();
+    startWidth = size.w;
+    startHeight = size.h;
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  }
+  
+  // Add resize handle to the element
+  const handle = document.createElement("div");
+  handle.style.position = "absolute";
+  handle.style.bottom = "0";
+  handle.style.right = "0";
+  handle.style.width = "16px";
+  handle.style.height = "16px";
+  handle.style.cursor = "se-resize";
+  handle.style.zIndex = "10";
+  handle.addEventListener("pointerdown", down);
+  element.style.position = "relative";
+  element.appendChild(handle);
+  
+  return {
+    destroy() {
+      handle.removeEventListener("pointerdown", down);
+      if (resizing) {
+        document.removeEventListener("pointermove", move);
+        document.removeEventListener("pointerup", up);
+      }
+      if (element.contains(handle)) {
+        element.removeChild(handle);
+      }
+    }
+  };
+}
