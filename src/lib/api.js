@@ -9,6 +9,65 @@
 
 const DEFAULT_BASE = typeof import.meta !== 'undefined' && import.meta.env?.DEV ? '/api/lmstudio' : 'http://localhost:1234';
 
+/**
+ * Retry configuration for API calls (Windows-compatible)
+ */
+const RETRY_CONFIG = {
+  maxRetries: 2,
+  baseDelay: 1000, // 1 second
+  maxDelay: 5000, // 5 seconds
+  backoffFactor: 2,
+};
+
+/**
+ * Enhanced error class for API failures
+ */
+class ApiError extends Error {
+  constructor(message, status, originalError = null) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.originalError = originalError;
+  }
+}
+
+/**
+ * Sleep utility for delays (Windows-compatible)
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Retry wrapper for API calls with exponential backoff
+ */
+async function withRetry(operation, options = {}) {
+  const { maxRetries = RETRY_CONFIG.maxRetries } = options;
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+
+      // Don't retry on certain errors
+      if (error.name === 'AbortError' || error.status >= 400 && error.status < 500) {
+        throw error;
+      }
+
+      // If this was the last attempt, throw the error
+      if (attempt === maxRetries) {
+        throw lastError;
+      }
+
+      // Wait before retrying (1s, then 2s)
+      const delay = RETRY_CONFIG.baseDelay * Math.pow(RETRY_CONFIG.backoffFactor, attempt);
+      await sleep(Math.min(delay, RETRY_CONFIG.maxDelay));
+    }
+  }
+}
+
 /** Current LM Studio base URL (no trailing slash). Reads from localStorage so UI settings apply immediately. */
 function getLmStudioBase() {
   if (typeof localStorage === 'undefined') return DEFAULT_BASE;

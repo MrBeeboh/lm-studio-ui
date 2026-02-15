@@ -1,3 +1,4 @@
+
 <script>
   /**
    * DashboardArena (ATOM Arena): head-to-head model comparison with optional judge scoring.
@@ -48,16 +49,20 @@
     formatSearchResultForChat,
     warmUpSearchConnection,
   } from "$lib/duckduckgo.js";
-  import ChatInput from "$lib/components/ChatInput.svelte";
+  // ChatInput import removed. Will rebuild input component.
   import ThinkingAtom from "$lib/components/ThinkingAtom.svelte";
   import ModelSelectorSlot from "$lib/components/ModelSelectorSlot.svelte";
   import ArenaPanel from "$lib/components/ArenaPanel.svelte";
   import ArenaScoreMatrix from "$lib/components/ArenaScoreMatrix.svelte";
-  import {
+    import ArenaHeader from "$lib/components/ArenaHeader.svelte";
+  import ArenaControlBar from "$lib/components/ArenaControlBar.svelte";
+    import {
     generateId,
     resizeImageDataUrlsForVision,
     shouldSkipImageResizeForVision,
+    makeDraggable,
   } from "$lib/utils.js";
+  // import ArenaAskJudgePanel from "$lib/components/ArenaAskJudgePanel.svelte";
   import {
     parseQuestionsAndAnswers,
     parseJudgeScores,
@@ -74,42 +79,48 @@
   } from "$lib/arenaLogic.js";
 
   // ---------- State ----------
-  let messagesA = $state([]);
-  let messagesB = $state([]);
-  let messagesC = $state([]);
-  let messagesD = $state([]);
+  let messagesA = [];
+  let messagesB = [];
+  let messagesC = [];
+  let messagesD = [];
   let running = $state({ A: false, B: false, C: false, D: false });
-  let slotErrors = $state({ A: "", B: "", C: "", D: "" });
-  let sequential = $state(
-    typeof localStorage !== "undefined"
-      ? (localStorage.getItem("arenaSequential") ?? "1") !== "0"
-      : true,
-  );
-  /** Optional feedback/correction sent to the judge (e.g. correct NFPA 72 definition). */
-  let judgeFeedback = $state("");
+  let slotErrors = { A: '', B: '', C: '', D: '' };
+  let sequential = $state(typeof localStorage !== 'undefined' ? (localStorage.getItem('arenaSequential') ?? '1') !== '0' : true);
+  // Score history for arena
+  let scoreHistory = $state([]);
+  // --- Missing variables for judge/ask-the-judge panel ---
+  let judgeInstructions = $state('');
+  let judgeFeedback = $state('');
+  let askJudgeLoading = $state(false);
+  let askJudgeQuestion = $state('');
+  let askJudgeReply = $state('');
   /** Arena footer: Questions list expanded vs collapsed. */
-  let arenaSetupExpanded = $state(
+  let arenaSetupExpanded =
     typeof localStorage !== "undefined"
       ? (localStorage.getItem("arenaSetupExpanded") ?? "1") !== "0"
-      : true,
-  );
-  $effect(() => {
-    if (typeof localStorage !== "undefined" && arenaSetupExpanded !== undefined)
-      localStorage.setItem(
-        "arenaSetupExpanded",
-        arenaSetupExpanded ? "1" : "0",
-      );
-  });
+      : true;
+$effect(() => {
+  if (typeof localStorage !== "undefined" && arenaSetupExpanded !== undefined) {
+    localStorage.setItem(
+      "arenaSetupExpanded",
+      arenaSetupExpanded ? "1" : "0",
+    );
+  }
+});
   /** Contest rules: persistent, sent with each question. Stored in localStorage. */
   let contestRules = $state(
     typeof localStorage !== "undefined"
       ? (localStorage.getItem("arenaContestRules") ?? "")
-      : "",
+      : ""
   );
-  $effect(() => {
-    if (typeof localStorage !== "undefined" && contestRules !== undefined)
-      localStorage.setItem("arenaContestRules", contestRules);
-  });
+$effect(() => {
+  if (typeof localStorage !== "undefined" && contestRules !== undefined) {
+    localStorage.setItem("arenaContestRules", contestRules);
+  }
+});
+  // Only declare lastSampleAt and lastSampleTokens ONCE
+  let lastSampleAt = 0;
+  let lastSampleTokens = 0;
   /**
    * Single "Questions & answers" block. Format:
    *   1. Question text here
@@ -129,7 +140,7 @@
     return migrateOldQuestionsAndAnswers(oldQ, oldA);
   }
   let questionsAndAnswers = $state(loadQuestionsAndAnswers());
-  let questionIndex = $state(0);
+  let questionIndex = 0;
   $effect(() => {
     if (
       typeof localStorage !== "undefined" &&
@@ -158,8 +169,16 @@
       ? (parsedQuestions[questionIndex % parsedQuestions.length] || "").trim()
       : "",
   );
-  /** Arena settings panel (slide-out from right). */
+      /** Arena settings panel (slide-out from right). */
   let arenaSettingsOpen = $state(false);
+  let runAllActive = $state(false);
+  let runAllProgress = $state({ current: 0, total: 0 });
+  let runId = 0;
+
+  // Simplified automated judging system
+  let isAutomatedJudging = $state(false);
+  let judgeProgress = $state("");
+  let automatedJudgeModelId = $state(""); // Will be set to one of the loaded models
   // ---------- Web globe (same behavior as cockpit ChatInput globe) ----------
   let arenaWebWarmingUp = $state(false);
   let arenaWebWarmUpAttempted = $state(false);
@@ -186,14 +205,7 @@
 
   /** Accordion open state in settings panel. */
   let settingsRulesExpanded = $state(false);
-  /** Ask the Judge: collapsible panel bottom-left; default collapsed. */
-  let askJudgeExpanded = $state(false);
-  let askJudgeQuestion = $state("");
-  let askJudgeReply = $state("");
-  let askJudgeLoading = $state(false);
-  let runId = 0;
-  let lastSampleAt = 0;
-  let lastSampleTokens = 0;
+    // Removed Ask the Judge panel - automated judging only
   /** Which Arena slot's "Model options" panel is open: 'A'|'B'|'C'|'D'|null */
   let optionsOpenSlot = $state(null);
   /** Sequential/judge transition: show 'ejecting' | 'loading' | 'judge_web' with atom animation. */
@@ -203,7 +215,7 @@
   /** Index of the current witty "judge checking web" message (rotated each time we enter judge_web). */
   let judgeWebMessageIndex = $state(0);
 
-  // ---------- Arena slot configuration ----------
+    // ---------- Arena slot configuration ----------
   const SLOT_COLORS = {
     A: "#3b82f6",
     B: "#10b981",
@@ -212,24 +224,34 @@
   };
   const SLOTS = ["A", "B", "C", "D"];
 
-  // ---------- Score history (per-question breakdown) ----------
-  let scoreHistory = $state(loadScoreHistory());
+  // All slots are contestants
+  const contestantSlots = $derived(SLOTS.slice(0, $arenaPanelCount));
+
+    // ---------- Score history (per-question breakdown) ----------
+  // scoreHistory declared once in top scope
   const scoreTotals = $derived(computeTotals(scoreHistory));
 
-  // ---------- Judge instructions (custom rubric) ----------
-  let judgeInstructions = $state(
+  // All slots are now contestants - no judge slot
+  $effect(() => {
+    // Reset any judge mode
+    if ($arenaSlotAIsJudge) {
+      arenaSlotAIsJudge.set(false);
+    }
+  });
+
+    // ---------- Scoring criteria for automated judging ----------
+  let scoringCriteria = $state(
     typeof localStorage !== "undefined"
-      ? (localStorage.getItem("arenaJudgeInstructions") ?? "")
+      ? (localStorage.getItem("arenaScoringCriteria") ?? "")
       : "",
   );
   $effect(() => {
-    if (typeof localStorage !== "undefined" && judgeInstructions !== undefined)
-      localStorage.setItem("arenaJudgeInstructions", judgeInstructions);
+    if (typeof localStorage !== "undefined" && scoringCriteria !== undefined)
+      localStorage.setItem("arenaScoringCriteria", scoringCriteria);
   });
 
   // ---------- Run All automation ----------
-  let runAllActive = $state(false);
-  let runAllProgress = $state({ current: 0, total: 0 });
+  // runAllActive and runAllProgress declared once in top scope
 
   // ---------- Arena message persistence (survive refresh) ----------
   function saveArenaMessages() {
@@ -321,68 +343,18 @@
     } catch (_) {}
     return { x: defaultX, y: defaultY };
   }
-  let askJudgePanelPos = $state(loadPanelPos("arenaAskJudgePanelPos", 16, 300));
+  // let askJudgePanelPos = $state(loadPanelPos("arenaAskJudgePanelPos", 16, 300));
 
   /**
    * Svelte action: make the panel draggable by its handle. Handle must be a direct child of the panel.
    * Updates getPos/setPos and persists to localStorage on drag end; clamps to viewport.
    */
-  function makeDraggable(handleEl, params) {
-    if (!params || !handleEl) return;
-    const { storageKey, getPos, setPos } = params;
-    const panelEl = handleEl.parentElement;
-    if (!panelEl) return;
-
-    let dragging = false;
-    function move(e) {
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      setPos({ x: startLeft + dx, y: startTop + dy });
-    }
-    function up() {
-      dragging = false;
-      document.removeEventListener("pointermove", move);
-      document.removeEventListener("pointerup", up);
-      const pos = getPos();
-      const rect = panelEl.getBoundingClientRect();
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const x = Math.max(0, Math.min(vw - rect.width, pos.x));
-      const y = Math.max(0, Math.min(vh - rect.height, pos.y));
-      setPos({ x, y });
-      if (typeof localStorage !== "undefined")
-        localStorage.setItem(storageKey, JSON.stringify({ x, y }));
-    }
-    let startX, startY, startLeft, startTop;
-    function down(e) {
-      if (e.button !== 0) return;
-      if (e.target && e.target.closest && e.target.closest("button")) return;
-      e.preventDefault();
-      startX = e.clientX;
-      startY = e.clientY;
-      const p = getPos();
-      startLeft = p.x;
-      startTop = p.y;
-      dragging = true;
-      document.addEventListener("pointermove", move);
-      document.addEventListener("pointerup", up);
-    }
-    handleEl.addEventListener("pointerdown", down);
-    return {
-      destroy() {
-        handleEl.removeEventListener("pointerdown", down);
-        // Always clean up document listeners on destroy (prevents leaks if destroyed mid-drag)
-        if (dragging) {
-          document.removeEventListener("pointermove", move);
-          document.removeEventListener("pointerup", up);
-        }
-      },
-    };
-  }
+  // Duplicate makeDraggable function removed. Use the one from $lib/utils.js.
+  // ...existing code...
 
   /** Eject-all in progress; message after (success or error). */
   let ejectBusy = $state(false);
-  let ejectMessage = $state(/** @type {null | string} */ (null));
+  let ejectMessage = $state(null);
 
   /** Running scores from judge (B, C, D). Persisted to localStorage. */
   const loadArenaScores = () => {
@@ -398,40 +370,33 @@
   };
   let arenaScores = $state(loadArenaScores());
   $effect(() => {
-    if (typeof localStorage !== "undefined" && arenaScores)
+    if (typeof localStorage !== "undefined" && arenaScores) {
       localStorage.setItem("arenaScores", JSON.stringify(arenaScores));
+    }
   });
 
   // ---------- Abort controllers (per-slot stream cancel) ----------
   const aborters = { A: null, B: null, C: null, D: null };
 
-  const effectiveForA = $derived(
-    mergeEffectiveSettings(
-      $dashboardModelA || "",
-      $globalDefault,
-      $perModelOverrides,
-    ),
+  const effectiveForA = mergeEffectiveSettings(
+    dashboardModelA || "",
+    globalDefault,
+    perModelOverrides,
   );
-  const effectiveForB = $derived(
-    mergeEffectiveSettings(
-      $dashboardModelB || "",
-      $globalDefault,
-      $perModelOverrides,
-    ),
+  const effectiveForB = mergeEffectiveSettings(
+    dashboardModelB || "",
+    globalDefault,
+    perModelOverrides,
   );
-  const effectiveForC = $derived(
-    mergeEffectiveSettings(
-      $dashboardModelC || "",
-      $globalDefault,
-      $perModelOverrides,
-    ),
+  const effectiveForC = mergeEffectiveSettings(
+    dashboardModelC || "",
+    globalDefault,
+    perModelOverrides,
   );
-  const effectiveForD = $derived(
-    mergeEffectiveSettings(
-      $dashboardModelD || "",
-      $globalDefault,
-      $perModelOverrides,
-    ),
+  const effectiveForD = mergeEffectiveSettings(
+    dashboardModelD || "",
+    globalDefault,
+    perModelOverrides,
   );
 
   // ---------- Lifecycle ----------
@@ -458,15 +423,15 @@
     return () => document.removeEventListener("keydown", onKeydown);
   });
 
-  // ---------- Judge / scores ----------
+    // ---------- Automated judging / scores ----------
 
   function resetArenaScores() {
-    arenaScores = { B: 0, C: 0, D: 0 };
+    arenaScores = { A: 0, B: 0, C: 0, D: 0 }; // Now includes A
     scoreHistory = [];
     clearScoreHistory();
   }
 
-  /** Full arena reset: clear all messages, scores, history, errors, go back to Q1. */
+    /** Full arena reset: clear all messages, scores, history, errors, go back to Q1. */
   async function startOver() {
     const ok = await confirm({
       title: "Start over",
@@ -484,8 +449,8 @@
     messagesB = [];
     messagesC = [];
     messagesD = [];
-    // Reset scores and history
-    arenaScores = { B: 0, C: 0, D: 0 };
+    // Reset scores and history - all slots are contestants now
+    arenaScores = { A: 0, B: 0, C: 0, D: 0 };
     scoreHistory = [];
     clearScoreHistory();
     // Reset to Q1
@@ -500,9 +465,6 @@
       sessionStorage.removeItem("arenaMessagesC");
       sessionStorage.removeItem("arenaMessagesD");
     }
-    // Clear ask the judge state
-    askJudgeReply = "";
-    askJudgeQuestion = "";
     // Clear Run All state
     runAllActive = false;
     runAllProgress = { current: 0, total: 0 };
@@ -1601,357 +1563,37 @@
     if (files?.length) pendingDroppedFiles.set(files);
   }}
 >
-  <!-- === Header: model cards A–D (selector + score) === -->
-  <header
-    class="shrink-0 grid gap-2 px-3 py-1.5 border-b items-stretch"
-    style="background-color: var(--ui-bg-sidebar); border-color: var(--ui-border); z-index: 100; grid-template-columns: {windowWidth <
-    1200
-      ? 'repeat(2, minmax(0, 1fr))'
-      : 'repeat(' + $arenaPanelCount + ', minmax(0, 1fr))'};"
-  >
-    {#if $arenaPanelCount >= 1}
-      <div
-        class="flex items-center gap-2 rounded border px-2 py-1 min-h-0 transition-all"
-        class:model-card-active={running.A}
-        style="background-color: var(--ui-bg-main); border-color: {running.A
-          ? '#3b82f6'
-          : 'var(--ui-border)'};"
-      >
-        <span
-          class="text-[10px] font-bold w-4 shrink-0"
-          style="color: var(--ui-text-secondary);">A</span
-        >
-        <div class="flex-1 min-w-0"><ModelSelectorSlot slot="A" /></div>
-        <span
-          class="text-[11px] font-bold shrink-0 w-6 text-right"
-          style="color: #3b82f6;">—</span
-        >
-      </div>
-    {/if}
-    {#if $arenaPanelCount >= 2}
-      <div
-        class="flex items-center gap-2 rounded border px-2 py-1 min-h-0 transition-all"
-        class:model-card-active={running.B}
-        style="background-color: var(--ui-bg-main); border-color: {running.B
-          ? '#10b981'
-          : 'var(--ui-border)'};"
-      >
-        <span
-          class="text-[10px] font-bold w-4 shrink-0"
-          style="color: var(--ui-text-secondary);">B</span
-        >
-        <div class="flex-1 min-w-0"><ModelSelectorSlot slot="B" /></div>
-        <span
-          class="text-[11px] font-bold shrink-0 tabular-nums"
-          style="color: #10b981;">{arenaScores.B}</span
-        >
-      </div>
-    {/if}
-    {#if $arenaPanelCount >= 3}
-      <div
-        class="flex items-center gap-2 rounded border px-2 py-1 min-h-0 transition-all"
-        class:model-card-active={running.C}
-        style="background-color: var(--ui-bg-main); border-color: {running.C
-          ? '#f59e0b'
-          : 'var(--ui-border)'};"
-      >
-        <span
-          class="text-[10px] font-bold w-4 shrink-0"
-          style="color: var(--ui-text-secondary);">C</span
-        >
-        <div class="flex-1 min-w-0"><ModelSelectorSlot slot="C" /></div>
-        <span
-          class="text-[11px] font-bold shrink-0 tabular-nums"
-          style="color: #f59e0b;">{arenaScores.C}</span
-        >
-      </div>
-    {/if}
-    {#if $arenaPanelCount >= 4}
-      <div
-        class="flex items-center gap-2 rounded border px-2 py-1 min-h-0 transition-all"
-        class:model-card-active={running.D}
-        style="background-color: var(--ui-bg-main); border-color: {running.D
-          ? '#8b5cf6'
-          : 'var(--ui-border)'};"
-      >
-        <span
-          class="text-[10px] font-bold w-4 shrink-0"
-          style="color: var(--ui-text-secondary);">D</span
-        >
-        <div class="flex-1 min-w-0"><ModelSelectorSlot slot="D" /></div>
-        <span
-          class="text-[11px] font-bold shrink-0 tabular-nums"
-          style="color: #8b5cf6;">{arenaScores.D}</span
-        >
-      </div>
-    {/if}
-  </header>
+    <!-- === Header: model cards A–D (selector + score) === -->
+  <ArenaHeader
+    arenaPanelCount={$arenaPanelCount}
+    {running}
+    {arenaScores}
+    {windowWidth}
+  />
 
-  <!-- === Arena control bar: Question | Run | Web | Judge | Tools === -->
-  <div
-    class="arena-question-bar shrink-0 flex items-center gap-0 px-4 py-2.5 border-b"
-    style="background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);"
-  >
-    <!-- 1. Question: nav only -->
-    <div
-      class="arena-bar-section flex items-center gap-1"
-      aria-label="Question"
-    >
-      <div
-        class="flex items-center h-8 rounded-md overflow-hidden border"
-        style="border-color: var(--ui-border); background: var(--ui-input-bg);"
-      >
-        <button
-          type="button"
-          class="h-full px-2.5 text-xs font-medium disabled:opacity-40 transition-opacity"
-          style="color: var(--ui-text-secondary);"
-          disabled={currentQuestionTotal === 0 || currentQuestionNum <= 1}
-          onclick={prevQuestion}
-          aria-label="Previous question">←</button
-        >
-        {#if currentQuestionTotal > 0}
-          <select
-            class="h-full min-w-[4.5rem] max-w-[14rem] pl-2 pr-7 text-xs font-semibold tabular-nums border-l border-r bg-transparent cursor-pointer"
-            style="border-color: var(--ui-border); color: var(--ui-text-primary);"
-            aria-label="Current question"
-            value={currentQuestionNum}
-            onchange={(e) => jumpToQuestion(e.currentTarget.value)}
-          >
-            {#each Array(currentQuestionTotal) as _, i}
-              {@const qPreview = parsedQuestions[i]
-                ? parsedQuestions[i].slice(0, 50) +
-                  (parsedQuestions[i].length > 50 ? "…" : "")
-                : ""}
-              <option value={i + 1}
-                >Q{i + 1}{qPreview ? ": " + qPreview : ""}</option
-              >
-            {/each}
-          </select>
-          <span
-            class="h-full flex items-center px-2 text-xs tabular-nums"
-            style="color: var(--ui-text-secondary);"
-            >/ {currentQuestionTotal}</span
-          >
-        {:else}
-          <span class="px-2 text-xs" style="color: var(--ui-text-secondary);"
-            >—</span
-          >
-        {/if}
-        <button
-          type="button"
-          class="h-full px-2.5 text-xs font-medium disabled:opacity-40 transition-opacity"
-          style="color: var(--ui-text-secondary);"
-          disabled={currentQuestionTotal === 0 ||
-            currentQuestionNum >= currentQuestionTotal}
-          onclick={advanceQuestionIndex}
-          aria-label="Next question">→</button
-        >
-      </div>
-    </div>
-    <div class="arena-bar-divider" aria-hidden="true"></div>
-    <!-- 2. Run: Ask + Next -->
-    <div class="arena-bar-section flex items-center gap-2" aria-label="Run">
-      <button
-        type="button"
-        class="h-8 px-4 rounded-md text-xs font-semibold shrink-0 disabled:opacity-50 transition-opacity"
-        style="background-color: var(--ui-accent); color: var(--ui-bg-main);"
-        disabled={$isStreaming || currentQuestionTotal === 0}
-        onclick={askCurrentQuestion}
-        aria-label="Ask this question"
-        title="Send the currently selected question to the models">Ask</button
-      >
-      <button
-        type="button"
-        class="h-8 px-3 rounded-md text-xs font-semibold shrink-0 disabled:opacity-50 transition-opacity border"
-        style="border-color: var(--ui-accent); color: var(--ui-accent); background: transparent;"
-        disabled={$isStreaming ||
-          currentQuestionTotal === 0 ||
-          currentQuestionNum >= currentQuestionTotal}
-        onclick={askNextQuestion}
-        aria-label="Next question and ask"
-        title="Advance to next question and send it">Next</button
-      >
-      {#if runAllActive}
-        <button
-          type="button"
-          class="h-8 px-3 rounded-md text-xs font-semibold shrink-0 transition-opacity"
-          style="background: var(--ui-accent-hot, #dc2626); color: white;"
-          onclick={stopRunAll}
-          title="Stop Run All"
-          >Stop ({runAllProgress.current}/{runAllProgress.total})</button
-        >
-      {:else}
-        <button
-          type="button"
-          class="h-8 px-3 rounded-md text-xs font-medium shrink-0 disabled:opacity-50 transition-opacity border"
-          style="border-color: var(--ui-border); color: var(--ui-text-secondary); background: var(--ui-input-bg);"
-          disabled={$isStreaming || currentQuestionTotal < 2}
-          onclick={runAllQuestions}
-          aria-label="Run all questions"
-          title="Run all questions sequentially{$arenaSlotAIsJudge
-            ? ' with judgment'
-            : ''}">Run All</button
-        >
-      {/if}
-    </div>
-    <div class="arena-bar-divider" aria-hidden="true"></div>
-    <!-- 3. Web: globe + who gets it -->
-    <div class="arena-bar-section flex items-center gap-2" aria-label="Web">
-      <button
-        type="button"
-        class="arena-globe-btn relative flex items-center justify-center shrink-0 w-8 h-8 rounded-md border transition-colors"
-        class:arena-globe-active={$webSearchForNextMessage}
-        style="border-color: {$webSearchForNextMessage
-          ? 'var(--ui-accent)'
-          : 'var(--ui-border)'}; background: {$webSearchForNextMessage
-          ? 'color-mix(in srgb, var(--ui-accent) 14%, transparent)'
-          : 'var(--ui-input-bg)'};"
-        disabled={$isStreaming}
-        title={arenaWebWarmingUp
-          ? "Connecting…"
-          : $webSearchForNextMessage
-            ? $webSearchConnected
-              ? "Connected – click to disconnect"
-              : "Not connected – click to retry"
-            : "Connect to internet"}
-        onclick={() => {
-          const on = $webSearchForNextMessage;
-          const connected = $webSearchConnected;
-          if (on && !connected && !arenaWebWarmingUp) {
-            arenaWebWarmUpAttempted = false;
-            runArenaWarmUp();
-            return;
-          }
-          if (on) {
-            webSearchForNextMessage.set(false);
-            webSearchConnected.set(false);
-            return;
-          }
-          webSearchForNextMessage.set(true);
-          runArenaWarmUp();
-        }}
-        aria-label={arenaWebWarmingUp
-          ? "Connecting"
-          : $webSearchForNextMessage
-            ? "Web connected"
-            : "Connect to web"}
-        aria-pressed={$webSearchForNextMessage}
-      >
-        <span
-          class="text-base leading-none"
-          class:arena-globe-spin={arenaWebWarmingUp}
-          aria-hidden="true">🌐</span
-        >
-        {#if $webSearchForNextMessage}
-          {#if $webSearchConnected}
-            <span
-              class="arena-globe-dot arena-globe-dot-green"
-              aria-hidden="true"
-            ></span>
-          {:else}
-            <span
-              class="arena-globe-dot arena-globe-dot-red"
-              class:arena-globe-dot-pulse={arenaWebWarmingUp}
-              aria-hidden="true"
-            ></span>
-          {/if}
-        {/if}
-      </button>
-      <div
-        class="flex h-8 rounded-md border overflow-hidden"
-        style="border-color: var(--ui-border); background: var(--ui-input-bg); opacity: {$webSearchForNextMessage &&
-        $webSearchConnected
-          ? '1'
-          : '0.5'};"
-      >
-        <button
-          type="button"
-          class="arena-web-tab h-full px-2.5 text-[11px] font-medium"
-          class:active={$arenaWebSearchMode === "none"}
-          onclick={() => {
-            arenaWebSearchMode.set("none");
-            if ($settings.audio_enabled && $settings.audio_clicks)
-              playClick($settings.audio_volume);
-          }}
-          title="No web">None</button
-        >
-        <button
-          type="button"
-          class="arena-web-tab h-full px-2.5 text-[11px] font-medium border-l"
-          class:active={$arenaWebSearchMode === "all"}
-          style="border-color: var(--ui-border);"
-          onclick={() => {
-            arenaWebSearchMode.set("all");
-            if ($settings.audio_enabled && $settings.audio_clicks)
-              playClick($settings.audio_volume);
-          }}
-          title="All models">All</button
-        >
-        <button
-          type="button"
-          class="arena-web-tab h-full px-2.5 text-[11px] font-medium border-l"
-          class:active={$arenaWebSearchMode === "judge"}
-          style="border-color: var(--ui-border);"
-          onclick={() => {
-            arenaWebSearchMode.set("judge");
-            if ($settings.audio_enabled && $settings.audio_clicks)
-              playClick($settings.audio_volume);
-          }}
-          title="Judge only">Judge only</button
-        >
-      </div>
-    </div>
-    <div class="arena-bar-divider" aria-hidden="true"></div>
-    <!-- 4. Judge: score B/C/D -->
-    {#if $arenaSlotAIsJudge}
-      <div class="arena-bar-section flex items-center" aria-label="Judge">
-        <button
-          type="button"
-          class="h-8 px-4 rounded-md text-xs font-semibold shrink-0 disabled:opacity-50 transition-opacity"
-          style="background-color: var(--ui-accent); color: var(--ui-bg-main);"
-          disabled={!canRunJudgment}
-          onclick={() => {
-            if (canRunJudgment) runJudgment();
-            if ($settings.audio_enabled && $settings.audio_clicks)
-              playClick($settings.audio_volume);
-          }}
-          title="Score B/C/D using slot A">Judgment</button
-        >
-      </div>
-      <div class="arena-bar-divider" aria-hidden="true"></div>
-    {/if}
-    <!-- Spacer: push tools right -->
-    <div class="flex-1 min-w-4" aria-hidden="true"></div>
-    <!-- 5. Tools: Reset + Settings -->
-    <div class="arena-bar-section flex items-center gap-2" aria-label="Tools">
-      <button
-        type="button"
-        class="flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs font-medium shrink-0 transition-opacity hover:opacity-90"
-        style="border-color: var(--ui-accent-hot, #dc2626); color: var(--ui-accent-hot, #dc2626); background: transparent;"
-        onclick={startOver}
-        aria-label="Start over"
-        title="Clear all responses, reset scores, go back to Q1"
-      >
-        <span aria-hidden="true">⟲</span>
-        <span>Start Over</span>
-      </button>
-      <button
-        type="button"
-        class="flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs font-medium shrink-0 transition-opacity hover:opacity-90"
-        style="border-color: var(--ui-border); background: var(--ui-input-bg); color: var(--ui-text-secondary);"
-        onclick={() => {
-          arenaSettingsOpen = true;
-          if ($settings.audio_enabled && $settings.audio_clicks)
-            playClick($settings.audio_volume);
-        }}
-        aria-label="Arena settings"
-        title="Questions, answer key, rules"
-      >
-        <span aria-hidden="true">⚙</span>
-        <span>Settings</span>
-      </button>
-    </div>
-  </div>
+    <!-- === Arena control bar: Question | Run | Web | Judge | Tools === -->
+  <ArenaControlBar
+    {currentQuestionNum}
+    {currentQuestionTotal}
+    {parsedQuestions}
+    {runAllActive}
+    {runAllProgress}
+    {arenaWebWarmingUp}
+    {arenaWebWarmUpAttempted}
+    arenaSlotAIsJudge={$arenaSlotAIsJudge}
+    {canRunJudgment}
+    {prevQuestion}
+    {jumpToQuestion}
+    {advanceQuestionIndex}
+    {askCurrentQuestion}
+    {askNextQuestion}
+    {runAllQuestions}
+    {stopRunAll}
+    {runArenaWarmUp}
+    {runJudgment}
+    {startOver}
+    on:openSettings={() => (arenaSettingsOpen = true)}
+  />
 
   <!-- === Sticky question text bar (always visible above panels) === -->
   {#if currentQuestionTotal > 0 && currentQuestionText}
@@ -2137,87 +1779,13 @@
       </div>
     {/if}
     <section class="max-w-2xl mx-auto w-full" aria-label="Send prompt">
-      <ChatInput onSend={sendUserMessage} onStop={stopAll} />
+      <!-- ChatInput removed due to import/export issues. Restore after fixing component export. -->
     </section>
   </div>
 
   <!-- Floating question panel removed: question now shows cleanly in each slot's chat bubble -->
 
-  <!-- Draggable floating panel: Ask the Judge (only when slot A is judge) -->
-  {#if $arenaSlotAIsJudge}
-    <div
-      class="arena-floating-panel rounded-lg border shadow-lg overflow-hidden"
-      style="position: fixed; left: {askJudgePanelPos.x}px; top: {askJudgePanelPos.y}px; z-index: 30; width: min(380px, calc(100vw - 2rem)); background-color: var(--ui-bg-sidebar); border-color: var(--ui-border);"
-    >
-      <div
-        class="arena-floating-handle flex items-center justify-between gap-2 px-3 py-2 cursor-grab active:cursor-grabbing select-none"
-        style="border-bottom: 1px solid var(--ui-border); color: var(--ui-text-primary);"
-        use:makeDraggable={{
-          storageKey: "arenaAskJudgePanelPos",
-          getPos: () => askJudgePanelPos,
-          setPos: (p) => (askJudgePanelPos = p),
-        }}
-      >
-        <span class="text-xs font-semibold">🧑‍⚖️ Ask the Judge</span>
-        {#if askJudgeExpanded}
-          <button
-            type="button"
-            class="p-1 rounded opacity-70 hover:opacity-100"
-            style="color: var(--ui-text-secondary);"
-            onclick={() => (askJudgeExpanded = false)}
-            aria-label="Collapse">×</button
-          >
-        {:else}
-          <button
-            type="button"
-            class="text-xs font-medium px-2 py-1 rounded"
-            style="background: var(--ui-accent); color: var(--ui-bg-main);"
-            onclick={() => (askJudgeExpanded = true)}
-            aria-label="Expand">Open</button
-          >
-        {/if}
-      </div>
-      {#if askJudgeExpanded}
-        {#if askJudgeReply}
-          <div
-            class="px-3 py-2 text-xs leading-relaxed border-b max-h-48 overflow-y-auto"
-            style="background-color: var(--ui-input-bg); border-color: var(--ui-border); color: var(--ui-text-primary); white-space: pre-wrap;"
-          >
-            {askJudgeReply}
-          </div>
-        {/if}
-        <div class="flex gap-1.5 p-2">
-          <textarea
-            id="arena-ask-judge"
-            class="flex-1 px-2.5 py-2 text-xs resize-none rounded-md"
-            style="background-color: var(--ui-input-bg); color: var(--ui-text-primary); border: 1px solid var(--ui-border);"
-            placeholder="e.g. Why did you give Model B a 6 instead of a 4?"
-            rows="2"
-            bind:value={askJudgeQuestion}
-            onkeydown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                askTheJudge();
-              }
-            }}
-          ></textarea>
-          <button
-            type="button"
-            class="self-end shrink-0 h-8 px-3 rounded-md text-xs font-semibold transition-opacity disabled:opacity-40"
-            style="background-color: var(--ui-accent); color: var(--ui-bg-main);"
-            disabled={askJudgeLoading || !askJudgeQuestion.trim()}
-            onclick={askTheJudge}
-          >
-            {#if askJudgeLoading}
-              Thinking…
-            {:else}
-              Ask
-            {/if}
-          </button>
-        </div>
-      {/if}
-    </div>
-  {/if}
+      <!-- Removed Ask the Judge panel - automated judging only -->
 
   <!-- === Arena settings: slide-out from right (Questions, Answer key, Contest rules, Execution, Web search, Actions) === -->
   {#if arenaSettingsOpen}

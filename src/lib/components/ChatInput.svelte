@@ -1,42 +1,52 @@
 <script>
-  import { get } from 'svelte/store';
-  import { isStreaming, voiceServerUrl, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress, webSearchConnected, layout } from '$lib/stores.js';
-  import ThinkingAtom from '$lib/components/ThinkingAtom.svelte';
-  import { warmUpSearchConnection } from '$lib/duckduckgo.js';
-  import { pdfToImageDataUrls } from '$lib/pdfToImages.js';
-  import { videoToFrames } from '$lib/videoToFrames.js';
-
-  let { onSend, onStop, placeholder: placeholderOverride = undefined } = $props();
-  const placeholderText = $derived(placeholderOverride ?? 'Type your message or drop/paste images, video, or PDFs... (Ctrl+Enter to send)');
-  let text = $state('');
-  let textareaEl = $state(null);
-  let fileInputEl = $state(/** @type {HTMLInputElement | null} */ (null));
-  let recording = $state(false);
-  let voiceProcessing = $state(false);
-  let voiceError = $state(null);
-  let mediaRecorder = $state(null);
-  let voiceStream = $state(null); // so we can release mic immediately on stop
-  let recordingChunks = $state([]);
-  let recordingStartMs = $state(0);
-  const MAX_RECORDING_MS = 90_000; // 90 s cap
-  let recordingTimerId = $state(null);
-
-  /** True while warming up web search connection (right after user turns on globe or when enabled via Command Palette). */
-  let webSearchWarmingUp = $state(false);
-
-  /** So we only auto-start warm-up once per "web search on"; avoid retry loop when warm-up fails. */
-  let webSearchWarmUpAttempted = $state(false);
-
-  /** Start (or retry) web-search warm-up: spin the globe, hit CORS proxy, set green/red dot. */
-  function runWarmUp() {
-    webSearchWarmUpAttempted = true;
-    webSearchWarmingUp = true;
-    webSearchConnected.set(false);
-    warmUpSearchConnection().then((ok) => {
-      webSearchWarmingUp = false;
-      webSearchConnected.set(ok);
-    });
+  import { createEventDispatcher } from "svelte";
+  let input = "";
+  let isStreaming = false;
+  const dispatch = createEventDispatcher();
+  */
+  // Clean input logic only. Web search and layout effects removed.
+    }
   }
+
+  function handleKeydown(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      handleSend();
+    }
+  }
+</script>
+
+<div class="chat-input">
+  <textarea
+    bind:value={input}
+    on:keydown={handleKeydown}
+    placeholder="Type your message..."
+    rows="2"
+    disabled={isStreaming}
+  />
+  <button
+    on:click={handleSend}
+    disabled={!input.trim() || isStreaming}
+  >
+    Send
+  </button>
+</div>
+}
+
+function handleKeydown(e) {
+<style>
+.chat-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+textarea {
+  flex: 1;
+  resize: vertical;
+}
+button {
+  min-width: 60px;
+}
+</style>
 
   /**
    * Auto-start warm-up when web search is turned on (globe, Command Palette, etc.).
