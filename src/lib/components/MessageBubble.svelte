@@ -82,11 +82,13 @@
   in:fly={{ y: 20, duration: 380, easing: quintOut }}
 >
   <div
-    class="w-full max-w-[min(42rem,100%)] rounded-2xl px-4 py-3 shadow-sm
+    class="w-full max-w-[min(42rem,100%)] rounded-2xl px-4 py-3 shadow-sm relative overflow-hidden
       {isUser
       ? 'ui-user-bubble'
       : 'bg-white dark:bg-zinc-800/90 text-zinc-900 dark:text-zinc-100 border border-zinc-200/80 dark:border-zinc-700/80'}"
   >
+      <!-- No background div here; handled by CSS below -->
+
     {#if isUser}
       {#if contentArray.length}
         <div class="space-y-2">
@@ -104,6 +106,24 @@
         </div>
       {:else}
         <p class="whitespace-pre-wrap">{content}</p>
+      {/if}
+      {#if videoUrls.length}
+        <div class="mt-2 flex flex-col gap-2">
+          {#each videoUrls as url (url)}
+            <div class="rounded-lg overflow-hidden max-w-md">
+              <video
+                src={url}
+                controls
+                class="w-full max-h-64 object-contain rounded-lg"
+                preload="metadata"
+                aria-label="Attached video"
+              >
+                <track kind="captions" />
+                Your browser does not support the video tag.
+              </video>
+            </div>
+          {/each}
+        </div>
       {/if}
     {:else if isAssistant}
       {#if message.modelId}
@@ -162,7 +182,18 @@
       {:else}
         <div class="prose-chat prose dark:prose-invert max-w-none">
           {@html html}
+          {#if content && content.includes('[Image: http')}
+            <div class="mt-2 flex flex-wrap gap-3">
+              {#each imageThumbUrls as url}
+                <img src={url} alt="Result image" class="max-h-32 rounded border border-zinc-200 dark:border-zinc-600" loading="lazy" />
+              {/each}
+            </div>
+          {/if}
         </div>
+      // Extract Brave image thumbnails from content
+      $: imageThumbUrls = (isAssistant && content && content.includes('[Image: http'))
+        ? Array.from(content.matchAll(/\[Image: (https?:\/\/[^\]]+)\]/g)).map(m => m[1])
+        : [];
       {/if}
       {#if isAssistant && imageRefs.length}
         <div class="mt-3 flex gap-2 overflow-x-auto pb-1 rounded-lg" role="list" aria-label="Searched images">

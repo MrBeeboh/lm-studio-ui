@@ -34,6 +34,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/ollama/, ''),
       },
+      '/api/search': {
+        target: 'http://localhost:5174',
+        changeOrigin: true,
+        rewrite: (path) => path,
+      },
     },
   },
 })

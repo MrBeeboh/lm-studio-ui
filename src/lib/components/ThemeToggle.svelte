@@ -9,7 +9,7 @@
     });
   }
 
-  $: label = $theme === 'dark' ? 'Dark' : $theme === 'light' ? 'Light' : 'System';
+  $: label = $theme === 'dark' ? 'Dark' : $theme === 'light' ? 'Light' : 'Auto';
 </script>
 
 <button

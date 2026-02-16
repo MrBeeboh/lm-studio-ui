@@ -147,10 +147,11 @@
     return out;
   }
 
-  async function sendUserMessage(text, imageDataUrls = []) {
+  async function sendUserMessage(text, imageDataUrls = [], videoDataUrls = []) {
     const hasText = (text || '').trim().length > 0;
     const hasImages = imageDataUrls?.length > 0;
-    if (!convId || (!hasText && !hasImages)) return;
+    const hasVideos = videoDataUrls?.length > 0;
+    if (!convId || (!hasText && !hasImages && !hasVideos)) return;
     chatError.set(null);
     if (!$effectiveModelId) {
       chatError.set('Please select a model from the dropdown above.');
@@ -191,10 +192,12 @@
         ]
       : effectiveText;
 
-    // Build payload from history + this message so the latest user message is always included
-    // (avoids any race where a post-write DB read might not yet see the new message)
     const history = await getMessages(convId);
-    await addMessage(convId, { role: 'user', content: userContent });
+    await addMessage(convId, {
+      role: 'user',
+      content: userContent,
+      videoUrls: hasVideos ? [...videoDataUrls] : undefined,
+    });
     await loadMessages();
     const msgsForApi = [...history, { role: 'user', content: userContent }];
     const apiMessages = buildApiMessages(msgsForApi, $settings.system_prompt);
@@ -638,6 +641,7 @@
       <!-- Greeting: ATOM branding, headline, gradient divider, input (power-user tone) -->
       <div class="ui-splash-wrap flex-1 flex flex-col items-center justify-center px-4 py-8 min-h-0">
         <div class="w-full max-w-[min(52rem,92%)] mx-auto flex flex-col items-center">
+
           <h1 class="ui-greeting-title text-2xl md:text-3xl font-semibold mb-8 text-center" style="color: var(--ui-text-primary);">What can I help with?</h1>
           {#if $chatError}
             <div class="mb-4 w-full px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm flex items-center justify-between gap-2">

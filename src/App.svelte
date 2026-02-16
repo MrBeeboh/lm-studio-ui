@@ -1,5 +1,6 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
+
   import { get } from 'svelte/store';
   import { fly } from 'svelte/transition';
   import { backOut, quintOut } from 'svelte/easing';
@@ -140,6 +141,7 @@
 </script>
 
 <div class="h-screen overflow-hidden" style="background-color: var(--ui-bg-main);">
+
   <AudioManager />
   <CommandPalette />
   <ConfirmModal />
@@ -168,9 +170,12 @@
         </div>
         <!-- Right: theme + status -->
         <div class="flex items-center gap-3 shrink-0">
-          <div class="flex items-center gap-2 shrink-0 rounded-lg pl-2.5 pr-2.5 py-1.5" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent);" role="group" aria-label="Appearance">
-            <UiThemeSelect compact={true} />
-            <ThemeToggle />
+          <div class="flex flex-col items-start gap-0.5 shrink-0 rounded-lg pl-2.5 pr-2.5 py-1.5" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent); min-width: 8.5rem;" role="group" aria-label="Appearance">
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-0.5" style="letter-spacing:0.04em;">Theme</span>
+            <div class="flex items-center gap-2 w-full">
+              <UiThemeSelect compact={true} />
+              <ThemeToggle />
+            </div>
           </div>
           <div class="flex items-center gap-1.5 shrink-0 rounded-lg pl-2.5 pr-3 py-1.5" style="background: color-mix(in srgb, {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? ($cloudApisAvailable ? '#3b82f6' : '#ef4444') : '#94a3b8'} 8%, transparent);" role="group" aria-label="Status">
             <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? ($cloudApisAvailable ? '#3b82f6' : '#ef4444') : '#94a3b8'};" aria-hidden="true"></span>

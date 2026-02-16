@@ -68,7 +68,7 @@
     runWarmUp();
   });
 
-  /** Attachments: { dataUrl, label } for display; we send dataUrl list to onSend. */
+  /** Attachments: { dataUrl, label, isVideo? } for display; we send dataUrl list to onSend. */
   let attachments = $state([]);
   let attachProcessing = $state(false);
   let attachError = $state(null);
@@ -174,10 +174,10 @@
   async function handleSubmit() {
     if ($isStreaming) return;
     const userMessage = (text || '').trim();
-    const imageDataUrls = attachments.map((a) => a.dataUrl);
-    if (!userMessage && imageDataUrls.length === 0) return;
+    const imageDataUrls = attachments.filter((a) => !a.isVideo).map((a) => a.dataUrl);
+    const videoDataUrls = attachments.filter((a) => a.isVideo).map((a) => a.dataUrl);
+    if (!userMessage && imageDataUrls.length === 0 && videoDataUrls.length === 0) return;
 
-    // Save text so we can restore it if send fails (e.g. web search error).
     const savedText = text;
     const savedAttachments = [...attachments];
     text = '';
@@ -185,9 +185,8 @@
     attachError = null;
 
     try {
-      if (onSend) await onSend(userMessage, imageDataUrls);
+      if (onSend) await onSend(userMessage, imageDataUrls, videoDataUrls);
     } catch (err) {
-      // Send failed — restore the user's message so they don't lose it.
       text = savedText;
       attachments = savedAttachments;
     }
@@ -255,13 +254,19 @@
           totalMb += fileMb;
         } else if (type.startsWith('video/')) {
           try {
+            const videoDataUrl = await new Promise((resolve, reject) => {
+              const r = new FileReader();
+              r.onload = () => resolve(r.result);
+              r.onerror = () => reject(new Error('Failed to read video'));
+              r.readAsDataURL(file);
+            });
+            attachments = [...attachments, { dataUrl: videoDataUrl, label: file.name, isVideo: true }];
+            totalMb += fileMb;
             const urls = await videoToFrames(file, { count: 8, maxDurationSec: 60 });
-            if (urls.length === 0) {
-              attachError = `Could not extract frames from "${file.name}".`;
-              continue;
+            if (urls.length > 0) {
+              urls.forEach((url, i) => addImageDataUrls([url], `${file.name} frame ${i + 1}`));
+              totalMb += urls.reduce((sum, u) => sum + (u.length * 3 / 4 / 1024 / 1024), 0);
             }
-            addImageDataUrls(urls, `${file.name} (${urls.length} frames)`);
-            totalMb += urls.reduce((sum, u) => sum + (u.length * 3 / 4 / 1024 / 1024), 0);
           } catch (e) {
             attachError = e?.message || `Could not read video "${file.name}".`;
           }
@@ -546,7 +551,11 @@
       <div class="attachments-row">
         {#each attachments as att, i}
           <div class="attachment-thumb">
-            {#if att.dataUrl.startsWith('data:image')}
+            {#if att.isVideo}
+              <div class="thumb-video-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" opacity="0.7"><polygon points="10 8 16 12 10 16"/></svg>
+              </div>
+            {:else if att.dataUrl.startsWith('data:image')}
               <img src={att.dataUrl} alt="" class="thumb-img" />
             {:else}
               <span class="thumb-placeholder">IMG</span>
@@ -1065,6 +1074,16 @@
     font-weight: 600;
     color: var(--ui-text-secondary);
     background: var(--ui-input-bg);
+  }
+  .thumb-video-icon {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ui-accent, #3b82f6);
+    background: color-mix(in srgb, var(--ui-accent, #3b82f6) 10%, var(--ui-input-bg, #fff));
+    border-radius: 4px;
   }
   .thumb-label {
     position: absolute;

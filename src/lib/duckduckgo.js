@@ -12,101 +12,33 @@
  *   corsproxy.io   → 403 DEAD
  *   allorigins /raw → 520 DEAD
  */
-const PROXIES = [
-  { url: (target) => `https://corsproxy.org/?url=${encodeURIComponent(target)}`, json: false },
-  { url: (target) => `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`, json: true },
-];
 
-const TIMEOUT_MS = 30000; // 30s – Lite HTML + proxy can be slow
-
-/**
- * Fetch HTML from a URL via CORS proxy.
- * Tries each proxy in order; each gets a fresh timeout so a slow/dead proxy
- * doesn't eat the budget for the next one.
- */
-async function fetchViaProxy(targetUrl) {
-  let lastErr;
-  for (const proxy of PROXIES) {
-    const signal =
-      typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(TIMEOUT_MS) : undefined;
-    try {
-      const url = proxy.url(targetUrl);
-      const res = await fetch(url, { signal });
-      if (!res.ok) throw new Error(`Search failed: ${res.status}`);
-      const text = await res.text();
-      if (proxy.json) {
-        // allorigins /get returns JSON { contents: "<html>..." }
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed.contents != null) return String(parsed.contents);
-        } catch (_) {
-          return text; // fallback: treat as raw
-        }
-      }
-      return text;
-    } catch (e) {
-      lastErr = e;
-      continue;
-    }
-  }
-  throw lastErr || new Error('Failed to fetch');
+// Fetch Brave JSON results from backend search proxy
+async function fetchViaProxy(query) {
+  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error(`Search failed: ${res.status}`);
+  return await res.json();
 }
 
 /**
  * Search DuckDuckGo Lite (HTML) and return real search results (title, snippet, url).
  * This returns actual web results; the Instant Answer API often returns empty for most queries.
  */
+
 async function searchDuckDuckGoLite(query) {
   const q = String(query || '').trim();
   if (!q) return [];
 
-  const targetUrl = 'https://lite.duckduckgo.com/lite/?q=' + encodeURIComponent(q);
-  const html = await fetchViaProxy(targetUrl);
-  if (typeof html !== 'string') return [];
 
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const results = [];
-  const links = doc.querySelectorAll('a[href*="uddg="]');
+  const braveResults = await fetchViaProxy(q);
+  if (!Array.isArray(braveResults)) return [];
 
-  for (const a of links) {
-    const href = a.getAttribute('href') || '';
-    const m = href.match(/uddg=([^&]+)/);
-    if (!m) continue;
-    let realUrl = '';
-    try {
-      realUrl = decodeURIComponent(m[1].replace(/\+/g, ' '));
-    } catch (_) {
-      continue;
-    }
-    const title = (a.textContent || '').trim();
-    if (!title || title.length > 500) continue;
-
-    let snippet = '';
-    const row = a.closest('tr');
-    if (row?.nextElementSibling) {
-      const nextRow = row.nextElementSibling;
-      const snippetCell = nextRow.querySelector('.result-snippet') || nextRow.querySelector('td');
-      if (snippetCell) snippet = (snippetCell.textContent || '').trim().slice(0, 400);
-    }
-
-    results.push({ title, snippet, url: realUrl });
-    if (results.length >= 8) break;
-  }
-
-  // Fallback: regex extract from HTML if DOM gave nothing (Lite layout varies)
-  if (results.length === 0) {
-    const linkRe = /<a[^>]+href="[^"]*uddg=([^&"]+)[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
-    let match;
-    while ((match = linkRe.exec(html)) !== null && results.length < 8) {
-      try {
-        const url = decodeURIComponent(match[1].replace(/\+/g, ' '));
-        const title = (match[2] || '').replace(/<[^>]+>/g, '').trim();
-        if (title && url && url.startsWith('http')) results.push({ title, snippet: '', url });
-      } catch (_) {}
-    }
-  }
-
+  // Brave API: each result has { title, url, description, thumbnail, ... }
+  const results = braveResults.slice(0, 5).map(r => ({
+    title: r.title || '',
+    url: r.url || '',
+    thumbnail: r.thumbnail || ''
+  })).filter(r => r.title && r.url);
   return results;
 }
 
@@ -137,6 +69,7 @@ export async function searchDuckDuckGo(query) {
   const related = liteResults.map((r) => ({
     text: r.snippet ? `${r.title} — ${r.snippet}` : r.title,
     url: r.url,
+    thumbnail: r.thumbnail
   }));
 
   return {
@@ -148,26 +81,14 @@ export async function searchDuckDuckGo(query) {
 }
 
 /**
- * Prime the CORS proxy/connection when the user turns on web search (globe click).
- * Tries first proxy, then second on failure, so one down proxy doesn't block.
+ * Prime the backend search proxy connection when the user turns on web search (globe click).
  * Resolves with true if warm-up succeeded, false otherwise (non-throwing).
  */
 export function warmUpSearchConnection() {
-  const targetUrl = 'https://lite.duckduckgo.com/lite/?q=a';
   const WARMUP_TIMEOUT_MS = 12000;
-  const getSignal = typeof AbortSignal?.timeout === 'function' ? () => AbortSignal.timeout(WARMUP_TIMEOUT_MS) : () => undefined;
-  function tryProxy(proxy) {
-    const url = proxy.url(targetUrl);
-    return fetch(url, { signal: getSignal() }).then((res) => {
-      if (!res.ok) throw new Error(res.status);  // MUST reject so .catch tries next proxy
-      return true;
-    });
-  }
-  // Try first proxy; if it fails (network error OR non-200), try second.
-  // Overall timeout: whichever finishes first, or false after 15s hard cap.
-  const attempt = tryProxy(PROXIES[0]).catch(() => tryProxy(PROXIES[1])).catch(() => false);
-  const hardTimeout = new Promise((r) => setTimeout(() => r(false), 15000));
-  return Promise.race([attempt, hardTimeout]);
+  return fetch('/api/search?q=a', { signal: (typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(WARMUP_TIMEOUT_MS) : undefined) })
+    .then((res) => res.ok)
+    .catch(() => false);
 }
 
 /**
@@ -188,8 +109,14 @@ export function formatSearchResultForChat(query, result) {
     lines.push('');
     lines.push('Search results:');
     result.related.slice(0, 8).forEach((r, i) => {
-      lines.push(`${i + 1}. ${r.text}`);
-      lines.push(`   ${r.url}`);
+      if (r.thumbnail) {
+        lines.push(`${i + 1}. ${r.text}`);
+        lines.push(`   ${r.url}`);
+        lines.push(`   [Image: ${r.thumbnail}]`);
+      } else {
+        lines.push(`${i + 1}. ${r.text}`);
+        lines.push(`   ${r.url}`);
+      }
     });
   }
   if (lines.length <= 3) lines.push('', '(No results found for this query.)');

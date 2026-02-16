@@ -17,8 +17,12 @@ REM 1) Start LM Studio headless server (port 1234) — minimized.
 where lms >nul 2>nul
 if errorlevel 1 goto no_lms
 
-echo [INFO] Launching LM Studio server on port %LM_PORT% [minimized]...
-start /min "LM Studio Server" cmd /c "lms server start --port %LM_PORT%"
+echo [INFO] Launching LM Studio server on port %LM_PORT% with CORS enabled [minimized]...
+start /min "LM Studio Server" cmd /c "lms server start --port %LM_PORT% --cors"
+
+REM 1b) Start local search proxy for web search (port 5174, ESM) — minimized.
+echo [INFO] Starting local search proxy (port 5174) [minimized]...
+start /min "Search Proxy" cmd /c "node scripts\search-proxy.mjs"
 goto start_ui
 
 :no_lms
