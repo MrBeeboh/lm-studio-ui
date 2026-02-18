@@ -80,15 +80,34 @@ export async function searchDuckDuckGo(query) {
   };
 }
 
-/**
- * Prime the backend search proxy connection when the user turns on web search (globe click).
- * Resolves with true if warm-up succeeded, false otherwise (non-throwing).
- */
+/** Check if search proxy is running (health check). */
+export async function checkSearchConnection() {
+  try {
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 3000);
+    const res = await fetch('/api/health', { signal: c.signal });
+    clearTimeout(t);
+    if (!res.ok) return { ok: false, error: 'Health check failed' };
+    const data = await res.json();
+    return { ok: true, available: data.search_available, timestamp: data.timestamp };
+  } catch (err) {
+    return { ok: false, error: err.name === 'AbortError' ? 'Connection timeout' : err.message };
+  }
+}
+
+/** Send Brave API key to search proxy (e.g. after pasting in Settings). */
+export async function syncBraveKeyToProxy(key) {
+  const k = (key || '').trim();
+  if (k.length < 10) return;
+  try {
+    const res = await fetch('/api/set-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: k, type: 'brave' }) });
+    if (!res.ok) throw new Error(await res.text());
+  } catch (err) { console.warn('[search]', err.message); }
+}
+
+/** Prime the backend; returns Promise<boolean> for UI. */
 export function warmUpSearchConnection() {
-  const WARMUP_TIMEOUT_MS = 12000;
-  return fetch('/api/search?q=a', { signal: (typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(WARMUP_TIMEOUT_MS) : undefined) })
-    .then((res) => res.ok)
-    .catch(() => false);
+  return checkSearchConnection().then((data) => data.ok && data.available === true);
 }
 
 /**

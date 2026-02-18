@@ -142,6 +142,13 @@ if (typeof localStorage !== 'undefined') {
   deepinfraApiKey.subscribe((v) => localStorage.setItem('deepinfraApiKey', (typeof v === 'string' ? v : '').trim()));
 }
 
+/** Brave Search API key: web search (globe). Stored in browser, sent to search proxy. */
+const getStoredBraveApiKey = () => (typeof localStorage !== 'undefined' ? (localStorage.getItem('braveApiKey') ?? '').trim() : null) ?? '';
+export const braveApiKey = writable(getStoredBraveApiKey());
+if (typeof localStorage !== 'undefined') {
+  braveApiKey.subscribe((v) => localStorage.setItem('braveApiKey', (typeof v === 'string' ? v : '').trim()));
+}
+
 /** Together image endpoint name: required for FLUX.1-schnell-Free (create dedicated endpoint at api.together.ai, then paste the endpoint name here). */
 const getStoredTogetherImageEndpoint = () => (typeof localStorage !== 'undefined' ? (localStorage.getItem('togetherImageEndpoint') ?? '').trim() : null) ?? '';
 export const togetherImageEndpoint = writable(getStoredTogetherImageEndpoint());

@@ -1,9 +1,9 @@
 <script>
   import { get } from 'svelte/store';
-  import { isStreaming, voiceServerUrl, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress, webSearchConnected, layout } from '$lib/stores.js';
+  import { isStreaming, voiceServerUrl, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress, webSearchConnected, layout, braveApiKey } from '$lib/stores.js';
   import ThinkingAtom from '$lib/components/ThinkingAtom.svelte';
   import { COCKPIT_SENDING, COCKPIT_SEARCHING, pickWitty } from '$lib/cockpitCopy.js';
-  import { warmUpSearchConnection } from '$lib/duckduckgo.js';
+  import { warmUpSearchConnection, syncBraveKeyToProxy } from '$lib/duckduckgo.js';
   import { pdfToImageDataUrls } from '$lib/pdfToImages.js';
   import { videoToFrames } from '$lib/videoToFrames.js';
 
@@ -38,12 +38,16 @@
     if ($webSearchInProgress) searchingMessage = pickWitty(COCKPIT_SEARCHING);
   });
 
-  /** Start (or retry) web-search warm-up: spin the globe, hit CORS proxy, set green/red dot. */
+  /** Start (or retry) web-search warm-up; if we have Brave key in Settings, send it to proxy and retry. */
   function runWarmUp() {
     webSearchWarmUpAttempted = true;
     webSearchWarmingUp = true;
     webSearchConnected.set(false);
     warmUpSearchConnection()
+      .then((ok) => {
+        if (!ok && get(braveApiKey)?.trim()) return syncBraveKeyToProxy(get(braveApiKey)).then(() => warmUpSearchConnection());
+        return ok;
+      })
       .then((ok) => {
         webSearchWarmingUp = false;
         webSearchConnected.set(ok);
