@@ -25,7 +25,7 @@
   import LabDiagnosticsOverlay from '$lib/components/LabDiagnosticsOverlay.svelte';
   import AtomLogo from '$lib/components/AtomLogo.svelte';
   import { checkLmStudioConnection } from '$lib/api.js';
-  import { COCKPIT_LM_CHECKING, COCKPIT_LM_CONNECTED, COCKPIT_LM_UNREACHABLE, COCKPIT_CLOUD_APIS_AVAILABLE, pickWitty } from '$lib/cockpitCopy.js';
+  import { COCKPIT_LM_CHECKING, COCKPIT_LM_CONNECTED, COCKPIT_LM_UNREACHABLE, COCKPIT_CLOUD_APIS_AVAILABLE } from '$lib/cockpitCopy.js';
 
   const LAYOUT_OPTS = [
     { value: 'cockpit', label: 'Cockpit' },
@@ -38,15 +38,14 @@
   const HEADER_BETWEEN_GROUPS = 'var(--space-5)';
   const HEADER_RIGHT_GROUP = 'margin-left: auto;';
 
-  /** Witty LM Studio / cloud status line; updates when connection state changes. */
   let lmStatusMessage = $state('');
   $effect(() => {
     const c = $lmStudioConnected;
     const cloud = $cloudApisAvailable;
-    if (c === true) lmStatusMessage = pickWitty(COCKPIT_LM_CONNECTED);
-    else if (c === false && cloud) lmStatusMessage = pickWitty(COCKPIT_CLOUD_APIS_AVAILABLE);
-    else if (c === false) lmStatusMessage = pickWitty(COCKPIT_LM_UNREACHABLE);
-    else lmStatusMessage = pickWitty(COCKPIT_LM_CHECKING);
+    if (c === true) lmStatusMessage = COCKPIT_LM_CONNECTED;
+    else if (c === false && cloud) lmStatusMessage = COCKPIT_CLOUD_APIS_AVAILABLE;
+    else if (c === false) lmStatusMessage = COCKPIT_LM_UNREACHABLE;
+    else lmStatusMessage = COCKPIT_LM_CHECKING;
   });
 
   onMount(() => {
@@ -180,19 +179,15 @@
         <!-- Center: model selector + preset — flexes to fill, centered -->
         <div class="flex-1 flex items-center justify-center gap-3 min-w-0 px-4">
           <div class="cockpit-header-group flex items-center gap-2 rounded-lg pl-2.5 pr-2.5 py-1.5 min-w-0" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent);" role="group" aria-label="Model and preset">
-            <span class="text-xs font-semibold uppercase tracking-wider shrink-0" style="color: var(--ui-text-secondary);">Model</span>
             <div class="min-w-0" style="{HEADER_MODEL_MIN}"><ModelSelector /></div>
             <div class="shrink-0" style="{HEADER_PRESET_MIN}"><PresetSelect compact={true} /></div>
           </div>
         </div>
         <!-- Right: theme + status -->
         <div class="flex items-center gap-3 shrink-0">
-          <div class="flex flex-col items-start gap-0.5 shrink-0 rounded-lg pl-2.5 pr-2.5 py-1.5" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent); min-width: 8.5rem;" role="group" aria-label="Appearance">
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-0.5" style="letter-spacing:0.04em;">Theme</span>
-            <div class="flex items-center gap-2 w-full">
-              <UiThemeSelect compact={true} />
-              <ThemeToggle />
-            </div>
+          <div class="flex items-center gap-2 shrink-0 rounded-lg pl-2.5 pr-2.5 py-1.5" style="background: color-mix(in srgb, var(--ui-accent) 8%, transparent); min-width: 8.5rem;" role="group" aria-label="Appearance">
+            <UiThemeSelect compact={true} />
+            <ThemeToggle />
           </div>
           <div class="flex items-center gap-1.5 shrink-0 rounded-lg pl-2.5 pr-3 py-1.5" style="background: color-mix(in srgb, {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? ($cloudApisAvailable ? '#3b82f6' : '#ef4444') : '#94a3b8'} 8%, transparent);" role="group" aria-label="Status">
             <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {$lmStudioConnected === true ? '#22c55e' : $lmStudioConnected === false ? ($cloudApisAvailable ? '#3b82f6' : '#ef4444') : '#94a3b8'};" aria-hidden="true"></span>
