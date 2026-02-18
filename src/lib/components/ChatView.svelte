@@ -1,8 +1,9 @@
 <script>
   import { get } from 'svelte/store';
-  import { activeConversationId, activeMessages, conversations, settings, effectiveModelId, isStreaming, chatError, chatCommand, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress, webSearchConnected, grokApiKey, deepinfraApiKey } from '$lib/stores.js';
+  import { activeConversationId, activeMessages, conversations, settings, effectiveModelId, isStreaming, chatError, chatCommand, pendingDroppedFiles, webSearchForNextMessage, webSearchInProgress, webSearchConnected, grokApiKey, deepinfraApiKey, uiTheme } from '$lib/stores.js';
   import { getMessages, addMessage, clearMessages, deleteMessage, getMessageCount } from '$lib/db.js';
-  import { streamChatCompletion, requestGrokImageGeneration, requestDeepInfraImageGeneration, requestDeepInfraVideoGeneration, isGrokModel, isDeepSeekModel } from '$lib/api.js';
+  import { streamChatCompletionWithMetrics } from '$lib/streamReporter.js';
+  import { requestGrokImageGeneration, requestDeepInfraImageGeneration, requestDeepInfraVideoGeneration, isGrokModel, isDeepSeekModel } from '$lib/api.js';
   import { searchDuckDuckGo, formatSearchResultForChat } from '$lib/duckduckgo.js';
   import MessageList from '$lib/components/MessageList.svelte';
   import ChatInput from '$lib/components/ChatInput.svelte';
@@ -10,6 +11,24 @@
   import { generateId, resizeImageDataUrlsForVision, shouldSkipImageResizeForVision } from '$lib/utils.js';
 
   const convId = $derived($activeConversationId);
+  /** Lazy-loaded for neural empty-state center stack (code-split). */
+  let NeuralSceneComponent = $state(null);
+  /** Lazy-loaded for signal theme: upper-left sonar/radar scope. */
+  let SignalScopeComponent = $state(null);
+  $effect(() => {
+    if ($uiTheme === 'neural') {
+      import('../../neural/NeuralScene.svelte').then((m) => (NeuralSceneComponent = m.default));
+    } else {
+      NeuralSceneComponent = null;
+    }
+  });
+  $effect(() => {
+    if ($uiTheme === 'signal') {
+      import('$lib/components/SignalScope.svelte').then((m) => (SignalScopeComponent = m.default));
+    } else {
+      SignalScopeComponent = null;
+    }
+  });
   let chatAbortController = $state(null);
   let imageGenerating = $state(false);
 
@@ -74,6 +93,10 @@
       videoGenTimerId = null;
       videoGenElapsed = '';
     }
+    return () => {
+      if (videoGenTimerId) clearInterval(videoGenTimerId);
+      videoGenTimerId = null;
+    };
   });
 
   $effect(() => {
@@ -222,7 +245,7 @@
 
     let streamResult;
     try {
-      streamResult = await streamChatCompletion({
+      streamResult = await streamChatCompletionWithMetrics({
         model: $effectiveModelId,
         messages: apiMessages,
         options: {
@@ -573,8 +596,8 @@
           >Cancel</button>
           <button
             type="button"
-            class="px-4 py-2 rounded-lg text-sm font-medium"
-            style="background: var(--ui-accent); color: var(--ui-bg-main);"
+            class="image-modal-generate-btn px-4 py-2 rounded-lg text-sm font-medium"
+            style="background: var(--ui-accent);"
             onclick={handleImageModalGenerate}
             disabled={imageGenerating || !canGenerateImage}
           >{imageGenerating ? 'Generating…' : 'Generate'}</button>
@@ -627,8 +650,8 @@
           >Cancel</button>
           <button
             type="button"
-            class="px-4 py-2 rounded-lg text-sm font-medium"
-            style="background: var(--ui-accent); color: var(--ui-bg-main);"
+            class="video-modal-generate-btn px-4 py-2 rounded-lg text-sm font-medium"
+            style="background: var(--ui-accent);"
             onclick={handleVideoModalGenerate}
             disabled={videoGenerating || !videoModalPrompt.trim()}
           >{videoGenerating ? 'Generating…' : 'Generate'}</button>
@@ -636,12 +659,18 @@
       </div>
     </div>
   {/if}
+  {#if $uiTheme === 'neural' && NeuralSceneComponent}
+    <NeuralSceneComponent />
+  {/if}
+  {#if $uiTheme === 'signal' && SignalScopeComponent}
+    <SignalScopeComponent />
+  {/if}
+  <div class="chat-view-content">
   {#if convId}
     {#if $activeMessages.length === 0}
-      <!-- Greeting: ATOM branding, headline, gradient divider, input (power-user tone) -->
+      <!-- Greeting + input: same layout for all themes; neural styles via CSS -->
       <div class="ui-splash-wrap flex-1 flex flex-col items-center justify-center px-4 py-8 min-h-0">
         <div class="w-full max-w-[min(52rem,92%)] mx-auto flex flex-col items-center">
-
           <h1 class="ui-greeting-title text-2xl md:text-3xl font-semibold mb-8 text-center" style="color: var(--ui-text-primary);">What can I help with?</h1>
           {#if $chatError}
             <div class="mb-4 w-full px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm flex items-center justify-between gap-2">
@@ -704,4 +733,5 @@
       </div>
     </div>
   {/if}
+  </div>
 </div>

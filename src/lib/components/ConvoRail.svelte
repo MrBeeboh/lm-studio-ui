@@ -129,7 +129,7 @@
   <button
     type="button"
     class="panel-tab {tabBounce ? 'panel-tab-bounce' : ''}"
-    style="--panel-tab-transform: translate(100%, -50%); top: 50%; right: 0; border-left: none; border-radius: 0 6px 6px 0;"
+    style="--panel-tab-transform: translate(100%, -50%); top: 50%; right: 0; border-left: none; border-radius: 0 var(--ui-radius) var(--ui-radius) 0;"
     title={expanded ? 'Collapse ([)' : 'Expand ([)'}
     aria-label={expanded ? 'Collapse rail' : 'Expand rail'}
     onclick={toggleExpanded}>
@@ -321,14 +321,14 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: var(--space-half);
     width: 40px;
-    padding: 4px 0;
-    border-radius: 8px;
+    padding: var(--space-1) 0;
+    border-radius: var(--radius-md);
     border: none;
     background: transparent;
     cursor: pointer;
-    transition: background 120ms, color 120ms;
+    transition: background var(--duration-normal), color var(--duration-normal);
   }
   .rail-icon-labeled:hover {
     background: color-mix(in srgb, var(--ui-accent) 12%, transparent);

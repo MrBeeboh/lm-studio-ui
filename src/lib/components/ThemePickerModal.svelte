@@ -30,12 +30,15 @@
     radioactivelab:   { bg: '#0a0a0a', accent: '#ccff00', text: '#ffffff' },
     coppercircuit:    { bg: '#1a1410', accent: '#ff6b35', text: '#fef5e7' },
     arcticneon:       { bg: '#e8f4f8', accent: '#00d9ff', text: '#001a1f' },
-    sunsetgradient:   { bg: '#fff5f5', accent: '#ff6b35', text: '#2d1b1e' },
+    sunsetgradient:   { bg: '#fff8f2', accent: '#e85c2a', text: '#2d1b0e' },
     racingstripe:     { bg: '#ffffff', accent: '#e30613', text: '#000000' },
     jungleterminal:   { bg: '#f0f4f0', accent: '#2d5016', text: '#1a1a1a' },
     magmaflow:        { bg: '#1a0a00', accent: '#ff4500', text: '#fff5ee' },
     chromeglass:      { bg: '#f8f9fa', accent: '#0066cc', text: '#212529' },
     toxicwaste:       { bg: '#000000', accent: '#ffff00', text: '#ffff00' },
+    cathedral:        { bg: '#f5f5f0', accent: '#1a1a1a', text: '#1a1a1a' },
+    temporal:         { bg: '#f0f0ed', accent: '#2563eb', text: '#1a1a1a' },
+    signal:           { bg: '#000000', accent: '#00ffff', text: '#00ffff' },
   };
 </script>
 

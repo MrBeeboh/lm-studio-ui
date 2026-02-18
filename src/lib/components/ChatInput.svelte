@@ -626,12 +626,12 @@
   </div>
 
   {#if $isStreaming && onStop}
-    <button type="button" class="send-button" style="background: var(--ui-accent-hot, #dc2626);" onclick={() => onStop()} title="Stop">Stop</button>
+    <button type="button" class="chat-send-button" data-state="stop" onclick={() => onStop()} title="Stop">Stop</button>
   {:else}
     <button
+      class="chat-send-button"
       onclick={handleSubmit}
       disabled={($isStreaming || $webSearchInProgress || (!text.trim() && attachments.length === 0)) ? true : null}
-      class="send-button"
     >
       {#if $webSearchInProgress}
         <span class="inline-flex items-center gap-1.5"><ThinkingAtom size={16} />{searchingMessage || 'Searching…'}</span>
@@ -661,14 +661,14 @@
     position: relative;
     display: flex;
     align-items: flex-start;
-    gap: 12px;
-    padding: 16px;
+    gap: var(--space-3);
+    padding: var(--space-4);
   }
 
   .chat-input-container > .attach-button-wrap,
   .chat-input-container > .mic-button,
   .chat-input-container > .web-search-button,
-  .chat-input-container > .send-button {
+  .chat-input-container > .chat-send-button {
     flex-shrink: 0;
     height: 44px;
     min-height: 44px;
@@ -681,9 +681,9 @@
     display: flex;
     flex-direction: column;
     border: 2px solid var(--ui-input-border, var(--ui-border, #e5e7eb));
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     background-color: var(--ui-input-bg, #fff);
-    transition: border-color 150ms, box-shadow 150ms;
+    transition: border-color var(--duration-normal), box-shadow var(--duration-normal);
     overflow: hidden;
   }
 
@@ -695,7 +695,7 @@
   textarea {
     flex: 0 0 auto;
     width: 100%;
-    padding: 12px;
+    padding: var(--space-3);
     border: none;
     font-family: inherit;
     font-size: 14px;
@@ -716,24 +716,24 @@
     cursor: not-allowed;
   }
 
-  .send-button {
-    padding: 12px 24px;
+  .chat-send-button {
+    padding: var(--space-3) var(--space-6);
     min-height: 44px;
     background: var(--ui-accent, #3b82f6);
     color: var(--ui-bg-main, white);
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     font-weight: 600;
     cursor: pointer;
-    transition: all 150ms;
+    transition: all var(--duration-normal);
   }
 
-  .send-button:hover:not(:disabled) {
+  .chat-send-button:hover:not(:disabled) {
     opacity: 0.9;
     transform: translateY(-1px);
   }
 
-  .send-button:disabled {
+  .chat-send-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
@@ -742,8 +742,8 @@
   .media-toolbar {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 8px 6px;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2) var(--space-2);
     flex-shrink: 0;
     border-top: 1px solid color-mix(in srgb, var(--ui-border, #e5e7eb) 50%, transparent);
   }
@@ -751,15 +751,15 @@
   .media-icon-btn {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--space-2);
     height: 28px;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     border: none;
     background: transparent;
     color: var(--ui-text-secondary, #6b7280);
     cursor: pointer;
-    transition: background 120ms, color 120ms;
-    padding: 0 8px;
+    transition: background var(--duration-normal), color var(--duration-normal);
+    padding: 0 var(--space-2);
   }
 
   .media-icon-btn:hover:not(:disabled) {
@@ -788,7 +788,7 @@
   .media-icon-generating {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
   }
 
   .media-elapsed {
@@ -802,7 +802,7 @@
     flex-shrink: 0;
     width: 44px;
     min-height: 44px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     border: 2px solid var(--ui-border, #e5e7eb);
     background: var(--ui-input-bg, #fff);
     color: var(--ui-text-primary, #111);
@@ -811,7 +811,7 @@
     align-items: center;
     justify-content: center;
     font-size: 1.25rem;
-    transition: all 150ms;
+    transition: all var(--duration-normal);
   }
   .mic-button:hover:not(:disabled) {
     border-color: var(--ui-accent, #3b82f6);
@@ -826,10 +826,10 @@
     height: 12px;
     border-radius: 50%;
     background: var(--ui-accent-hot, #dc2626);
-    animation: pulse 1s ease-in-out infinite;
+    animation: pulse var(--duration-long) var(--ease-in-out) infinite;
   }
   .mic-spinner {
-    animation: spin 0.8s linear infinite;
+    animation: spin var(--duration-slower) linear infinite;
   }
   @keyframes pulse {
     0%, 100% { opacity: 1; }
@@ -841,11 +841,11 @@
   .voice-recording-hint {
     position: absolute;
     bottom: 100%;
-    left: 16px;
-    margin-bottom: 6px;
+    left: var(--space-4);
+    margin-bottom: var(--space-2);
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     font-size: 13px;
     font-weight: 600;
     color: var(--ui-accent, #3b82f6);
@@ -856,7 +856,7 @@
     height: 8px;
     border-radius: 50%;
     background: var(--ui-accent-hot, #ef4444);
-    animation: recording-pulse 1.2s ease-in-out infinite;
+    animation: recording-pulse var(--duration-long) var(--ease-in-out) infinite;
   }
   @keyframes recording-pulse {
     0%, 100% { opacity: 1; transform: scale(1); }
@@ -866,12 +866,12 @@
   .attach-error {
     position: absolute;
     bottom: 100%;
-    left: 16px;
+    left: var(--space-4);
     right: 80px;
-    margin: 0 0 4px 0;
-    padding: 6px 10px;
+    margin: 0 0 var(--space-1) 0;
+    padding: var(--space-2) var(--space-3);
     font-size: 12px;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: color-mix(in srgb, #dc2626 15%, var(--ui-bg-main));
     color: var(--ui-text-primary);
     border: 1px solid var(--ui-accent-hot, #dc2626);
@@ -894,20 +894,20 @@
   }
   .clippy-bubble {
     position: absolute;
-    bottom: calc(100% + 10px);
+    bottom: calc(100% + var(--space-3));
     left: 50%;
     transform: translateX(-50%) scale(0.9);
-    animation: clippy-bubble-in 0.35s ease-out forwards;
+    animation: clippy-bubble-in var(--duration-slow) var(--ease-out) forwards;
     max-width: 260px;
     z-index: 50;
     pointer-events: none;
   }
   .clippy-bubble-text {
     display: block;
-    padding: 10px 14px;
+    padding: var(--space-3) var(--space-4);
     font-size: 12px;
     line-height: 1.35;
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     background: var(--ui-bg-main);
     color: var(--ui-text-primary);
     border: 2px solid var(--ui-border);
@@ -916,7 +916,7 @@
   .clippy-bubble-tail {
     position: absolute;
     left: 50%;
-    bottom: -8px;
+    bottom: calc(-1 * var(--space-2));
     margin-left: -7px;
     width: 0;
     height: 0;
@@ -949,7 +949,7 @@
     }
   }
   .attach-button.clippy-active .attach-icon {
-    animation: clippy-wiggle 0.6s ease-in-out;
+    animation: clippy-wiggle var(--duration-slower) var(--ease-in-out);
   }
   @keyframes clippy-wiggle {
     0%, 100% { transform: rotate(0deg); }
@@ -963,7 +963,7 @@
     flex-shrink: 0;
     width: 44px;
     min-height: 44px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     border: 2px solid var(--ui-border, #e5e7eb);
     background: var(--ui-input-bg, #fff);
     color: var(--ui-text-primary, #111);
@@ -972,7 +972,7 @@
     align-items: center;
     justify-content: center;
     font-size: 1.25rem;
-    transition: all 150ms;
+    transition: all var(--duration-normal);
   }
   .attach-button:hover:not(:disabled) {
     border-color: var(--ui-accent, #3b82f6);
@@ -987,7 +987,7 @@
     flex-shrink: 0;
     width: 44px;
     min-height: 44px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     border: 2px solid var(--ui-border, #e5e7eb);
     background: var(--ui-input-bg, #fff);
     color: var(--ui-text-primary, #111);
@@ -995,7 +995,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: border-color 0.15s, background 0.15s;
+    transition: border-color var(--duration-fast), background var(--duration-fast);
   }
   .web-search-button:hover:not(:disabled) {
     border-color: var(--ui-accent, #3b82f6);
@@ -1014,7 +1014,7 @@
     line-height: 1;
   }
   .web-search-icon-spin {
-    animation: web-search-globe-spin 1.2s linear infinite;
+    animation: web-search-globe-spin var(--duration-long) linear infinite;
   }
   @keyframes web-search-globe-spin {
     from { transform: rotate(0deg); }
@@ -1036,7 +1036,7 @@
     background: #dc2626;
   }
   .web-search-dot-pulse {
-    animation: web-search-dot-pulse 1.2s ease-in-out infinite;
+    animation: web-search-dot-pulse var(--duration-long) var(--ease-in-out) infinite;
   }
   @keyframes web-search-dot-pulse {
     0%, 100% { opacity: 1; }
@@ -1045,14 +1045,14 @@
   .attachments-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--space-2);
     align-items: flex-start;
   }
   .attachment-thumb {
     position: relative;
     width: 56px;
     height: 56px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     overflow: hidden;
     border: 1px solid var(--ui-border, #e5e7eb);
     background: var(--ui-bg-main);

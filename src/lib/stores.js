@@ -356,6 +356,22 @@ export function updateSettings(patch) {
 /** Whether we're currently streaming a response */
 export const isStreaming = writable(false);
 
+/**
+ * AI Lab diagnostics overlay: runtime metrics. Single writer = stream reporter only.
+ * Throttled updates (max 100ms) during stream; start/end events outside throttle.
+ * liveChunks = count of onChunk calls (text deltas); lastTotalTokens = API usage.completion_tokens when available.
+ * @type {import('svelte/store').Writable<{ isStreaming: boolean, liveChunks: number, liveChunksPerSec: number, lastLatencyMs: number | null, lastTokenAt: number | null, lastTotalTokens: number | null, temperature: number | null }>}
+ */
+export const themeMetrics = writable({
+  isStreaming: false,
+  liveChunks: 0,
+  liveChunksPerSec: 0,
+  lastLatencyMs: null,
+  lastTokenAt: null,
+  lastTotalTokens: null,
+  temperature: null,
+});
+
 /** Error message to show near chat input (e.g. API or model error) */
 export const chatError = writable(null);
 /** One-shot chat command (regen/export/clear). ChatView subscribes and handles. */

@@ -4,7 +4,8 @@
   import { get } from 'svelte/store';
   import { fly } from 'svelte/transition';
   import { backOut, quintOut } from 'svelte/easing';
-  import { theme, sidebarOpen, settingsOpen, layout, dashboardModelA, dashboardModelB, dashboardModelC, dashboardModelD, activeConversationId, conversations, selectedModelId, uiTheme, sidebarCollapsed, cockpitIntelOpen, arenaPanelCount, models, lmStudioConnected, cloudApisAvailable } from '$lib/stores.js';
+  import { theme, sidebarOpen, settingsOpen, layout, dashboardModelA, dashboardModelB, dashboardModelC, dashboardModelD, activeConversationId, conversations, selectedModelId, uiTheme, sidebarCollapsed, cockpitIntelOpen, arenaPanelCount, models, lmStudioConnected, cloudApisAvailable, activeMessages, isStreaming } from '$lib/stores.js';
+  import { startTemporalController } from '$lib/temporalController.js';
   import { createConversation, listConversations, getMessageCount, getMessages } from '$lib/db.js';
   import { getModels } from '$lib/api.js';
   import Sidebar from '$lib/components/Sidebar.svelte';
@@ -21,6 +22,7 @@
   import DashboardArena from '$lib/components/DashboardArena.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
   import ShortcutsModal from '$lib/components/ShortcutsModal.svelte';
+  import LabDiagnosticsOverlay from '$lib/components/LabDiagnosticsOverlay.svelte';
   import AtomLogo from '$lib/components/AtomLogo.svelte';
   import { checkLmStudioConnection } from '$lib/api.js';
   import { COCKPIT_LM_CHECKING, COCKPIT_LM_CONNECTED, COCKPIT_LM_UNREACHABLE, COCKPIT_CLOUD_APIS_AVAILABLE, pickWitty } from '$lib/cockpitCopy.js';
@@ -32,8 +34,8 @@
   const HEADER_MODEL_MIN = 'min-width: 22rem;';
   const HEADER_PRESET_MIN = 'min-width: 7rem;';
   const HEADER_THEME_MIN = 'min-width: 10rem;';
-  const HEADER_GROUP_GAP = 'gap: 0.75rem;';
-  const HEADER_BETWEEN_GROUPS = '1.25rem';
+  const HEADER_GROUP_GAP = 'gap: var(--space-3);';
+  const HEADER_BETWEEN_GROUPS = 'var(--space-5)';
   const HEADER_RIGHT_GROUP = 'margin-left: auto;';
 
   /** Witty LM Studio / cloud status line; updates when connection state changes. */
@@ -70,6 +72,18 @@
   layout.subscribe((v) => { if (typeof localStorage !== 'undefined') localStorage.setItem('layout', v); });
   sidebarCollapsed.subscribe((v) => { if (typeof localStorage !== 'undefined') localStorage.setItem('sidebarCollapsed', v ? 'true' : 'false'); });
   onMount(() => { document.documentElement.dataset.uiTheme = get(uiTheme); });
+
+  isStreaming.subscribe((streaming) => {
+    if (typeof document !== 'undefined') {
+      document.body.classList.toggle('is-streaming', !!streaming);
+    }
+  });
+  onMount(() => { document.body.classList.toggle('is-streaming', !!get(isStreaming)); });
+
+  onMount(() => {
+    const stopTemporal = startTemporalController(activeMessages, uiTheme);
+    return () => { stopTemporal(); };
+  });
 
   onMount(() => {
     let pollId;
@@ -140,7 +154,10 @@
   }
 </script>
 
-<div class="h-screen overflow-hidden" style="background-color: var(--ui-bg-main);">
+<div
+  class="h-screen overflow-hidden"
+  style="position: relative; z-index: 1; background-color: {$uiTheme === 'neural' || $uiTheme === 'signal' ? 'transparent' : 'var(--ui-bg-main)'};"
+>
 
   <AudioManager />
   <CommandPalette />
@@ -185,9 +202,9 @@
           </div>
         </div>
       </header>
-      <div class="flex flex-1 min-h-0 min-w-0 relative">
+      <div class="flex flex-1 min-h-0 min-w-0 relative cockpit-main-row">
         <ConvoRail />
-        <main class="flex-1 flex flex-col min-w-0 min-h-0" style="background-color: var(--ui-bg-main);">
+        <main class="flex-1 flex flex-col min-w-0 min-h-0 cockpit-main" style="background-color: var(--ui-bg-main);">
           <ChatView />
         </main>
         {#if $cockpitIntelOpen}
@@ -200,7 +217,7 @@
             <button
               type="button"
               class="panel-tab {intelTabBounce ? 'panel-tab-bounce' : ''}"
-              style="--panel-tab-transform: translate(-100%, -50%); left: 0; top: 50%; border-right: none; border-radius: 6px 0 0 6px;"
+              style="--panel-tab-transform: translate(-100%, -50%); left: 0; top: 50%; border-right: none; border-radius: var(--ui-radius) 0 0 var(--ui-radius);"
               title="Close Intel panel"
               aria-label="Close Intel panel"
               onclick={toggleIntel}
@@ -217,7 +234,7 @@
             <button
               type="button"
               class="panel-tab {intelTabBounce ? 'panel-tab-bounce' : ''}"
-              style="--panel-tab-transform: translateY(-50%); left: 0; top: 50%; border-right: none; border-radius: 6px 0 0 6px;"
+              style="--panel-tab-transform: translateY(-50%); left: 0; top: 50%; border-right: none; border-radius: var(--ui-radius) 0 0 var(--ui-radius);"
               title="Open Intel panel"
               aria-label="Open Intel panel"
               onclick={toggleIntel}
@@ -277,7 +294,7 @@
           <button
             type="button"
             class="panel-tab {sidebarTabBounce ? 'panel-tab-bounce' : ''}"
-            style="--panel-tab-transform: translate(100%, -50%); top: 50%; right: 0; border-left: none; border-radius: 0 6px 6px 0;"
+            style="--panel-tab-transform: translate(100%, -50%); top: 50%; right: 0; border-left: none; border-radius: 0 var(--ui-radius) var(--ui-radius) 0;"
             title={$sidebarCollapsed ? 'Expand sidebar (conversations)' : 'Collapse sidebar'}
             aria-label={$sidebarCollapsed ? 'Expand sidebar (conversations)' : 'Collapse sidebar'}
             onclick={toggleSidebarCollapsed}>
@@ -308,4 +325,5 @@
   {#if $settingsOpen}
     <SettingsPanel onclose={() => settingsOpen.set(false)} />
   {/if}
+  <LabDiagnosticsOverlay />
 </div>

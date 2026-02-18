@@ -6,7 +6,7 @@
    * Right slide-out: Arena settings (Questions, Answer key, Contest rules, Execution, Web search, Actions).
    */
   import { get } from "svelte/store";
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import {
     chatError,
     dashboardModelA,
@@ -40,8 +40,8 @@
     arenaDebugMode,
   } from "$lib/stores.js";
   import { playClick, playComplete } from "$lib/audio.js";
+  import { streamChatCompletionWithMetrics } from "$lib/streamReporter.js";
   import {
-    streamChatCompletion,
     requestChatCompletion,
     unloadModel,
     loadModel,
@@ -406,6 +406,9 @@
     return i;
   }
 
+  /** Cleanup for judgment popup drag; called on mouseup or onDestroy so no listener leak. */
+  let judgmentDragCleanup = /** @type {null | (() => void)} */ (null);
+
   function startScoresPanelDrag(e) {
     if (!scoresPanelEl || !judgmentPopup) return;
     if (/** @type {HTMLElement} */ (e.target).closest("button")) return;
@@ -423,12 +426,23 @@
       };
     }
     function onUp() {
+      if (judgmentDragCleanup) {
+        judgmentDragCleanup();
+        judgmentDragCleanup = null;
+      }
+    }
+    judgmentDragCleanup = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
-    }
+      judgmentDragCleanup = null;
+    };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   }
+
+  onDestroy(() => {
+    if (judgmentDragCleanup) judgmentDragCleanup();
+  });
 
   /** Transition: 'ejecting' | 'loading' | 'loading_judge' | 'judge_web' | 'scoring' (atom animation). */
   let arenaTransitionPhase = $state(
@@ -901,7 +915,7 @@
       aborters[slot] = controller;
       const timeoutId = setTimeout(() => controller.abort(), softTimeoutMs);
       try {
-        const result = await streamChatCompletion({
+        const result = await streamChatCompletionWithMetrics({
           model: modelId,
           messages,
           options: {
@@ -1548,7 +1562,7 @@
     const judgeOpts = getSettingsForSlot("A");
     try {
       arenaTransitionPhase = "scoring";
-      await streamChatCompletion({
+      await streamChatCompletionWithMetrics({
         model: judgeId,
         messages,
         options: {
@@ -1774,7 +1788,7 @@
     const controller = new AbortController();
     const askJudgeOpts = getSettingsForSlot("A");
     try {
-      await streamChatCompletion({
+      await streamChatCompletionWithMetrics({
         model: judgeId,
         messages,
         options: {
@@ -2250,7 +2264,7 @@
       <button
         type="button"
         class="panel-tab"
-        style="--panel-tab-transform: translate(-100%, -50%); left: 0; top: 50%; border-right: none; border-radius: 6px 0 0 6px;"
+        style="--panel-tab-transform: translate(-100%, -50%); left: 0; top: 50%; border-right: none; border-radius: var(--ui-radius) 0 0 var(--ui-radius);"
         title="Show Arena settings"
         aria-label="Show Arena settings"
         onclick={() => (arenaSettingsCollapsed = false)}
@@ -2266,7 +2280,7 @@
       <button
         type="button"
         class="panel-tab"
-        style="--panel-tab-transform: translate(-100%, -50%); top: 50%; left: 0; border-right: none; border-radius: 6px 0 0 6px;"
+        style="--panel-tab-transform: translate(-100%, -50%); top: 50%; left: 0; border-right: none; border-radius: var(--ui-radius) 0 0 var(--ui-radius);"
         title="Hide Arena settings"
         aria-label="Hide Arena settings"
         onclick={() => (arenaSettingsCollapsed = true)}
@@ -2330,7 +2344,7 @@
           <textarea
             id="arena-builder-categories"
             class="w-full rounded-md resize-y text-[13px] font-sans mb-3"
-            style="padding: 10px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 72px;"
+            style="padding: var(--space-3); background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 72px;"
             placeholder="e.g. physics, algorithms, history"
             rows="3"
             bind:value={arenaBuilderCategories}
@@ -2354,7 +2368,7 @@
           <h3 class="font-semibold text-sm mb-1" style="color: var(--ui-text-primary);">Judge instructions</h3>
           <textarea
             class="w-full rounded-md resize-y text-[13px] font-sans"
-            style="padding: 10px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 60px;"
+            style="padding: var(--space-3); background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 60px;"
             placeholder="Custom rubric, e.g. Weight accuracy 60%, conciseness 20%, formatting 20%."
             rows="2"
             bind:value={judgeInstructions}
@@ -2365,7 +2379,7 @@
           <h3 class="font-semibold text-sm mb-1" style="color: var(--ui-text-primary);">Judge feedback</h3>
           <textarea
             class="w-full rounded-md resize-y text-[13px] font-sans"
-            style="padding: 10px; background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 60px;"
+            style="padding: var(--space-3); background-color: var(--ui-input-bg); border: 1px solid var(--ui-border); color: var(--ui-text-primary); min-height: 60px;"
             placeholder="Optional correction, e.g. The correct answer to Q3 is 42."
             rows="2"
             bind:value={judgeFeedback}

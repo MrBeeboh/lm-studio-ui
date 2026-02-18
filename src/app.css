@@ -1,10 +1,31 @@
 @import 'tailwindcss';
+@import './styles/tokens.css';
 
 /* Tailwind v4: use .dark class on html for theme toggle (not just prefers-color-scheme) */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-sans: 'Inter', system-ui, ui-sans-serif, sans-serif;
+  /* Single source of truth: Tailwind spacing uses one multiplier base */
+  --spacing: var(--space-1);
+  /* Global radius kill switch: utilities still work; themes set --ui-radius */
+  --radius-sm: var(--ui-radius);
+  --radius-md: var(--ui-radius);
+  --radius-lg: var(--ui-radius);
+  --radius-xl: var(--ui-radius);
+  --radius-2xl: var(--ui-radius);
+}
+/* Default radius (Cathedral overrides to --radius-none) */
+:root {
+  --ui-radius: var(--radius-md);
+  /* Temporal theme evolution (controller overwrites when data-ui-theme="temporal") */
+  --ui-bg-intensity: 1;
+  --ui-saturation: 1;
+  --ui-depth-multiplier: 1;
+  --ui-blur-strength: 1;
+  --ui-shadow-depth: 1;
+  --ui-panel-separation: 1;
+  --ui-texture-opacity: 0;
 }
 
 /* Base: refined neutral backgrounds, darker dark mode */
@@ -21,11 +42,23 @@ select:focus-visible,
 [role="combobox"]:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--ui-bg-main), 0 0 0 4px var(--ui-accent);
-  border-radius: 4px;
+  border-radius: var(--ui-radius);
 }
 body {
   @apply min-h-screen text-zinc-800 dark:text-zinc-200;
   background-color: #fafafa;
+}
+
+/* Stop state for send button (themes override; neural uses .chat-input-container .chat-send-button) */
+.chat-send-button[data-state="stop"] {
+  background: var(--ui-accent-hot, #dc2626);
+}
+/* Fallback error UI (main.js): token spacing only */
+.error-pre {
+  padding: var(--space-4);
+  color: red;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
 }
 .dark body {
   background-color: #0d0d0d;
@@ -97,7 +130,7 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
 .thinking-atom-nucleus {
   fill: var(--ui-accent);
   transform-origin: 16px 16px;
-  animation: atom-nucleus-pulse 2s ease-in-out infinite;
+  animation: atom-nucleus-pulse var(--duration-long) var(--ease-in-out) infinite;
   filter: drop-shadow(0 0 4px var(--ui-accent));
 }
 .thinking-atom-orbit,
@@ -183,7 +216,7 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   background: color-mix(in srgb, var(--ui-accent) 8%, var(--ui-bg-sidebar));
   color: var(--ui-accent);
   cursor: pointer;
-  transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+  transition: background-color var(--duration-normal), color var(--duration-normal), box-shadow var(--duration-normal);
   z-index: 10;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
@@ -241,7 +274,7 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   100% { transform: var(--panel-tab-transform) scale(1); }
 }
 .panel-tab-bounce {
-  animation: panel-tab-bounce 0.4s ease-out;
+  animation: panel-tab-bounce var(--duration-slow) var(--ease-out);
 }
 
 /* Micro-animations (subtle system feedback) */
@@ -250,7 +283,7 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   50% { transform: scale(1.008); box-shadow: 0 0 18px rgba(220, 38, 38, 0.08); }
 }
 .ui-input-breathe {
-  animation: ui-input-breathe 3.6s ease-in-out infinite;
+  animation: ui-input-breathe var(--duration-long) var(--ease-in-out) infinite;
 }
 
 @keyframes ui-odometer-scan {
@@ -277,7 +310,7 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   opacity: 0.35;
   mix-blend-mode: multiply;
   pointer-events: none;
-  animation: ui-odometer-scan 0.8s linear infinite;
+  animation: ui-odometer-scan var(--duration-slower) linear infinite;
 }
 
 @keyframes ui-gpu-pulse {
@@ -314,7 +347,7 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   backdrop-filter: blur(8px);
 }
 .command-palette-modal {
-  animation: command-palette-in 0.2s ease-out;
+  animation: command-palette-in var(--duration-normal) var(--ease-out);
 }
 
 /* Message entrance: subtle fade + slide */
@@ -346,7 +379,7 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   }
 }
 .intel-panel-enter {
-  animation: intel-panel-in 0.2s ease-out;
+  animation: intel-panel-in var(--duration-normal) var(--ease-out);
 }
 
 /* Convo rail width transition is inline (transition-[width] duration-200) */
@@ -401,6 +434,148 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   --ui-input-bg: #27272a;
   --ui-input-border: #52525b;
   --ui-glow: rgba(224, 60, 81, 0.3);
+}
+
+/* Command Cathedral (v1 architectural validation): brutalist, zero radius, mechanical motion, token-driven */
+[data-ui-theme="cathedral"] {
+  --ui-bg-main: #f5f5f0;
+  --ui-bg-sidebar: #e8e8e0;
+  --ui-accent: #1a1a1a;
+  --ui-accent-hot: #2d2d2d;
+  --ui-text-primary: #1a1a1a;
+  --ui-text-secondary: #4a4a4a;
+  --ui-border: #9a9a8e;
+  --ui-sidebar-active: #ddd;
+  --ui-sidebar-hover: #d0d0c8;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #9a9a8e;
+  --ui-glow: rgba(0, 0, 0, 0.15);
+  --ui-radius: var(--radius-none);
+  --ui-ease: var(--ease-mechanical);
+  --ui-panel-duration: var(--duration-slow);
+}
+[data-ui-theme="cathedral"] body {
+  font-family: var(--font-mono);
+  background-color: var(--ui-bg-main);
+  font-size: var(--text-base);
+  line-height: var(--text-base-line);
+}
+/* Mechanical panel slide: token duration + curve */
+[data-ui-theme="cathedral"] aside {
+  transition: width var(--ui-panel-duration) var(--ui-ease);
+}
+[data-ui-theme="cathedral"] .panel-tab {
+  border-radius: var(--ui-radius) !important;
+}
+/* Zero-radius enforcement: all rounded UI uses token */
+[data-ui-theme="cathedral"] button,
+[data-ui-theme="cathedral"] input,
+[data-ui-theme="cathedral"] textarea,
+[data-ui-theme="cathedral"] select,
+[data-ui-theme="cathedral"] [role="button"],
+[data-ui-theme="cathedral"] [role="combobox"],
+[data-ui-theme="cathedral"] [class*="rounded"],
+[data-ui-theme="cathedral"] .prose-chat pre,
+[data-ui-theme="cathedral"] .prose-chat code {
+  border-radius: var(--ui-radius) !important;
+}
+[data-ui-theme="cathedral"] button:focus-visible,
+[data-ui-theme="cathedral"] a:focus-visible,
+[data-ui-theme="cathedral"] input:focus-visible,
+[data-ui-theme="cathedral"] textarea:focus-visible,
+[data-ui-theme="cathedral"] select:focus-visible,
+[data-ui-theme="cathedral"] [role="button"]:focus-visible,
+[data-ui-theme="cathedral"] [role="combobox"]:focus-visible {
+  border-radius: var(--ui-radius);
+}
+/* Stamped line-by-line output: CSS-only, token duration */
+@keyframes cathedral-stamp {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+[data-ui-theme="cathedral"] .prose-chat > * {
+  animation: cathedral-stamp var(--duration-fast) var(--ease-mechanical) backwards;
+}
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(1) { animation-delay: 0.04s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(2) { animation-delay: 0.08s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(3) { animation-delay: 0.12s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(4) { animation-delay: 0.16s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(5) { animation-delay: 0.2s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(6) { animation-delay: 0.24s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(7) { animation-delay: 0.28s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(8) { animation-delay: 0.32s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(9) { animation-delay: 0.36s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(10) { animation-delay: 0.4s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(11) { animation-delay: 0.44s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(12) { animation-delay: 0.48s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(13) { animation-delay: 0.52s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(14) { animation-delay: 0.56s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(15) { animation-delay: 0.6s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(16) { animation-delay: 0.64s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(17) { animation-delay: 0.68s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(18) { animation-delay: 0.72s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(19) { animation-delay: 0.76s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(20) { animation-delay: 0.8s; }
+[data-ui-theme="cathedral"] .prose-chat > *:nth-child(n+21) { animation-delay: 0.84s; }
+@media (prefers-reduced-motion: reduce) {
+  [data-ui-theme="cathedral"] .prose-chat > * {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Temporal – evolution by time + conversation depth (controller sets vars on root) */
+[data-ui-theme="temporal"] {
+  --ui-bg-main: #f0f0ed;
+  --ui-bg-sidebar: #e5e5e2;
+  --ui-accent: #2563eb;
+  --ui-accent-hot: #3b82f6;
+  --ui-text-primary: #1a1a1a;
+  --ui-text-secondary: #525252;
+  --ui-border: rgba(0, 0, 0, 0.1);
+  --ui-sidebar-active: #dbdbd8;
+  --ui-sidebar-hover: #e0e0dd;
+  --ui-input-bg: #ffffff;
+  --ui-input-border: #d4d4d4;
+  --ui-glow: rgba(37, 99, 235, 0.2);
+}
+.dark[data-ui-theme="temporal"] {
+  --ui-bg-main: #1a1a1a;
+  --ui-bg-sidebar: #252525;
+  --ui-accent: #60a5fa;
+  --ui-accent-hot: #93c5fd;
+  --ui-text-primary: #f5f5f5;
+  --ui-text-secondary: #a3a3a3;
+  --ui-border: rgba(255, 255, 255, 0.1);
+  --ui-sidebar-active: #2d2d2d;
+  --ui-sidebar-hover: #333;
+  --ui-input-bg: #262626;
+  --ui-input-border: #404040;
+  --ui-glow: rgba(96, 165, 250, 0.25);
+}
+[data-ui-theme="temporal"] body {
+  filter: brightness(var(--ui-bg-intensity)) saturate(var(--ui-saturation));
+}
+[data-ui-theme="temporal"] aside {
+  border-width: calc(1px * var(--ui-panel-separation));
+}
+[data-ui-theme="temporal"] .panel-tab {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, calc(0.12 * var(--ui-shadow-depth)));
+}
+[data-ui-theme="temporal"] main::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background: radial-gradient(ellipse at 50% 0%, rgba(0, 0, 0, var(--ui-texture-opacity)) 0%, transparent 60%);
 }
 
 /* Newsprint (Editorial) – warm paper, dark ink, masthead accent */
@@ -479,11 +654,11 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   border-left: 2px solid var(--ui-border);
 }
 /* Send / primary buttons: muted gold (newspaper ad accent) */
-[data-ui-theme="dailyedition"] .send-button:not([style*="background: var(--ui-accent-hot)"]) {
+[data-ui-theme="dailyedition"] .chat-send-button:not([data-state="stop"]) {
   background: #8b6914 !important;
   color: #fcfbf7 !important;
 }
-[data-ui-theme="dailyedition"] .send-button:hover:not(:disabled):not([style*="background: var(--ui-accent-hot)"]) {
+[data-ui-theme="dailyedition"] .chat-send-button:hover:not(:disabled):not([data-state="stop"]) {
   background: #a67c1a !important;
 }
 /* Daily Edition: headline – title case, less aggressive (capitalize, font-weight 700) */
@@ -517,26 +692,26 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
 
 /* Splash: subtle fade-in on load */
 .ui-splash-wrap {
-  animation: ui-splash-fade-in 0.4s ease-out;
+  animation: ui-splash-fade-in var(--duration-slow) var(--ease-out);
 }
 @keyframes ui-splash-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-/* Neural Network Blue */
+/* Neural Observatory (Cyberpunk) — canvas is background layer; UI floats above with transparent bg */
 [data-ui-theme="neural"] {
-  --ui-bg-main: #0b0c10;
-  --ui-bg-sidebar: #1f2833;
+  --ui-bg-main: transparent;
+  --ui-bg-sidebar: rgba(15, 23, 42, 0.85);
   --ui-accent: #66fcf1;
   --ui-accent-hot: #ff6b6b;
   --ui-text-primary: #c5c6c7;
   --ui-text-secondary: #66fcf1;
-  --ui-border: #2d3748;
-  --ui-sidebar-active: #0b0c10;
-  --ui-sidebar-hover: #2d3748;
-  --ui-input-bg: #1f2833;
-  --ui-input-border: #2d3748;
+  --ui-border: rgba(102, 252, 241, 0.25);
+  --ui-sidebar-active: rgba(15, 23, 42, 0.95);
+  --ui-sidebar-hover: rgba(45, 55, 72, 0.9);
+  --ui-input-bg: rgba(31, 40, 51, 0.9);
+  --ui-input-border: rgba(102, 252, 241, 0.3);
   --ui-glow: rgba(102, 252, 241, 0.3);
   --atom-accent: #66fcf1;
   --atom-accent-light: #66fcf1;
@@ -544,9 +719,353 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   --atom-amber: #45a29e;
 }
 [data-ui-theme="neural"] body {
-  background: linear-gradient(135deg, #0b0c10 0%, #1f2833 50%, #0b0c10 100%);
-  background-size: 200% 200%;
-  animation: ui-gradient-shift 18s ease infinite;
+  background: radial-gradient(circle at center, #0a0f1f 0%, #020409 60%, #000000 100%);
+}
+
+/* Right-side negative space: dark gradient so UI sits in composed space */
+[data-ui-theme="neural"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 25% 45%, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0.85) 100%),
+    linear-gradient(to right, rgba(0,0,0,0) 0%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0.75) 100%);
+  z-index: 0;
+}
+
+/* Header / top bar: visible over bloom */
+[data-ui-theme="neural"] .cockpit-header,
+[data-ui-theme="neural"] header.shrink-0 {
+  position: relative;
+  z-index: 2;
+  background: rgba(10, 15, 25, 0.88) !important;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Sidebar/ConvoRail always on top of neural canvas (no cover) */
+.cockpit-main-row {
+  isolation: isolate;
+}
+[data-ui-theme="neural"] .convo-rail {
+  position: relative;
+  z-index: 2;
+}
+[data-ui-theme="neural"] .cockpit-main {
+  position: relative;
+  z-index: 0;
+}
+/* Sidebar legibility (ConvoRail + main sidebar aside) */
+[data-ui-theme="neural"] .convo-rail,
+[data-ui-theme="neural"] aside.shrink-0.border-r {
+  background: rgba(12, 18, 30, 0.85) !important;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Chat input: zero panel effect; flex layout for stable send button alignment */
+[data-ui-theme="neural"] .chat-input-container {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+/* Inner input area: no panel (border/background/shadow) in neural */
+[data-ui-theme="neural"] .chat-input-container .chat-input-main {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+[data-ui-theme="neural"] .chat-input-container .chat-input-main:focus-within {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+[data-ui-theme="neural"] .chat-input-dock {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ChatView content above neural background; fills shell */
+.chat-view-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+[data-ui-theme="neural"] .chat-view-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Greeting: visible above canvas, no transform; centered; tighter gap to input */
+[data-ui-theme="neural"] .ui-greeting-title {
+  transform: none;
+  text-align: center;
+  opacity: 1;
+  font-weight: 500;
+  letter-spacing: 0.072em;
+  text-transform: uppercase;
+  color: #e6faff;
+  text-shadow:
+    0 0 8px rgba(0, 255, 255, 0.38),
+    0 0 18px rgba(255, 0, 200, 0.22);
+  margin-bottom: 0.5rem;
+}
+[data-ui-theme="neural"] .ui-splash-wrap .ui-splash-divider {
+  margin-bottom: 0.75rem;
+}
+
+/* Neural: send button — integrated with input row, no circle/glow */
+[data-ui-theme="neural"] .chat-input-container .chat-send-button {
+  position: static;
+  border-radius: 8px;
+  padding: 0.55rem 1rem;
+  font-size: 0.9rem;
+  background: rgba(0, 255, 255, 0.06);
+  border: 1px solid rgba(0, 255, 255, 0.5);
+  color: #00ffff;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  font-weight: 600;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+[data-ui-theme="neural"] .chat-input-container .chat-send-button:hover {
+  background: rgba(0, 255, 255, 0.12);
+  border-color: rgba(0, 255, 255, 0.7);
+}
+
+[data-ui-theme="neural"] .chat-input-container .chat-send-button:active {
+  background: rgba(0, 255, 255, 0.1);
+}
+
+[data-ui-theme="neural"] .chat-input-container .chat-send-button:disabled {
+  background: rgba(40, 50, 65, 0.6);
+  color: rgba(255, 255, 255, 0.35);
+  border-color: rgba(0, 255, 255, 0.25);
+  cursor: not-allowed;
+}
+
+[data-ui-theme="neural"] .chat-input-container .chat-send-button[data-state="stop"] {
+  background: #b91c1c;
+  border-color: rgba(255, 100, 100, 0.6);
+  color: #fff;
+}
+
+/* Modal Generate buttons: text color from theme (neural overrides below) */
+.image-modal-generate-btn,
+.video-modal-generate-btn {
+  color: var(--ui-bg-main);
+}
+/* Neural: --ui-bg-main is transparent so force dark text on accent bg */
+[data-ui-theme="neural"] .image-modal-generate-btn,
+[data-ui-theme="neural"] .video-modal-generate-btn {
+  color: #0a0f1f !important;
+}
+
+/* Neural: thinking text readable (cyan on white was unreadable) */
+[data-ui-theme="neural"] .assistant-thinking {
+  color: #0f766e !important;
+}
+.dark [data-ui-theme="neural"] .assistant-thinking {
+  color: #99f6e4 !important;
+}
+
+/* ========== Signal Room — transmission chamber, no Three.js ========== */
+@keyframes signalDrift {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(6px); }
+}
+@keyframes signalSweep {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+@keyframes signalFlicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.996; }
+}
+/* Morse SOS: phosphor green pulse during send only; intensity reduced ~30% */
+@keyframes transmitPulse {
+  /* S: three short (dit) */
+  0%   { background-color: rgba(0,255,0,0.65); color: #000; box-shadow: 0 0 0 8px rgba(0,255,0,0.7), 0 0 70px 28px rgba(0,255,0,0.65); }
+  3.7% { background-color: transparent; color: #00ffff; box-shadow: 0 0 0 0 rgba(0,255,0,0), 0 0 8px 2px rgba(0,255,255,0.12); }
+  7.4% { background-color: rgba(0,255,0,0.65); color: #000; box-shadow: 0 0 0 8px rgba(0,255,0,0.7), 0 0 70px 28px rgba(0,255,0,0.65); }
+  11%  { background-color: transparent; color: #00ffff; box-shadow: 0 0 0 0 rgba(0,255,0,0), 0 0 8px 2px rgba(0,255,255,0.12); }
+  15%  { background-color: rgba(0,255,0,0.65); color: #000; box-shadow: 0 0 0 8px rgba(0,255,0,0.7), 0 0 70px 28px rgba(0,255,0,0.65); }
+  19%  { background-color: transparent; color: #00ffff; box-shadow: 0 0 0 0 rgba(0,255,0,0), 0 0 8px 2px rgba(0,255,255,0.12); }
+  /* O: three long (dah) */
+  30%  { background-color: rgba(0,255,0,0.65); color: #000; box-shadow: 0 0 0 8px rgba(0,255,0,0.7), 0 0 70px 28px rgba(0,255,0,0.65); }
+  41%  { background-color: transparent; color: #00ffff; box-shadow: 0 0 0 0 rgba(0,255,0,0), 0 0 8px 2px rgba(0,255,255,0.12); }
+  52%  { background-color: rgba(0,255,0,0.65); color: #000; box-shadow: 0 0 0 8px rgba(0,255,0,0.7), 0 0 70px 28px rgba(0,255,0,0.65); }
+  63%  { background-color: transparent; color: #00ffff; box-shadow: 0 0 0 0 rgba(0,255,0,0), 0 0 8px 2px rgba(0,255,255,0.12); }
+  74%  { background-color: rgba(0,255,0,0.65); color: #000; box-shadow: 0 0 0 8px rgba(0,255,0,0.7), 0 0 70px 28px rgba(0,255,0,0.65); }
+  85%  { background-color: transparent; color: #00ffff; box-shadow: 0 0 0 0 rgba(0,255,0,0), 0 0 8px 2px rgba(0,255,255,0.12); }
+  /* S: three short */
+  89%  { background-color: rgba(0,255,0,0.65); color: #000; box-shadow: 0 0 0 8px rgba(0,255,0,0.7), 0 0 70px 28px rgba(0,255,0,0.65); }
+  93%  { background-color: transparent; color: #00ffff; box-shadow: 0 0 0 0 rgba(0,255,0,0), 0 0 8px 2px rgba(0,255,255,0.12); }
+  97%  { background-color: rgba(0,255,0,0.65); color: #000; box-shadow: 0 0 0 8px rgba(0,255,0,0.7), 0 0 70px 28px rgba(0,255,0,0.65); }
+  100% { background-color: transparent; color: #00ffff; box-shadow: 0 0 0 0 rgba(0,255,0,0), 0 0 8px 2px rgba(0,255,255,0.12); }
+}
+
+[data-ui-theme="signal"] {
+  --ui-bg-main: transparent;
+  --ui-bg-sidebar: rgba(0, 20, 25, 0.9);
+  --ui-accent: #00ffff;
+  --ui-accent-hot: #ff6b6b;
+  --ui-text-primary: #00ffff;
+  --ui-text-secondary: rgba(0, 255, 255, 0.75);
+  --ui-border: rgba(0, 255, 255, 0.4);
+  --ui-input-bg: transparent;
+  --ui-input-border: rgba(0, 255, 255, 0.4);
+  --atom-accent: #00ffff;
+  --atom-teal: #00ffff;
+  --atom-amber: #00ffff;
+}
+
+/* SIGNAL ROOM ENVIRONMENT */
+
+html[data-ui-theme="signal"] body {
+  background: #000;
+  overflow: hidden;
+  animation: signalFlicker 8s infinite;
+}
+
+/* Scan lines */
+html[data-ui-theme="signal"] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(0,255,255,0.035) 0px,
+      rgba(0,255,255,0.035) 1px,
+      transparent 1px,
+      transparent 4px
+    );
+  animation: signalDrift 14s linear infinite;
+  box-shadow: inset 0 0 140px rgba(0,0,0,0.85);
+}
+
+/* Radial transmission core only (no sweep bar) */
+html[data-ui-theme="signal"] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 32% 48%,
+    rgba(0,255,255,0.09),
+    rgba(0,255,255,0.04) 35%,
+    transparent 75%
+  );
+}
+
+html[data-ui-theme="signal"] body.is-streaming::after {
+  background: radial-gradient(
+    circle at 32% 48%,
+    rgba(0,255,255,0.14),
+    rgba(0,255,255,0.04) 35%,
+    transparent 75%
+  );
+}
+
+[data-ui-theme="signal"] .chat-view-content {
+  position: relative;
+  z-index: 1;
+}
+
+[data-ui-theme="signal"] .ui-greeting-title {
+  text-align: center;
+  letter-spacing: 0.12em;
+  color: #00ffff;
+  opacity: 0.9;
+  text-shadow: none;
+  font-weight: 400;
+}
+
+[data-ui-theme="signal"] .chat-input-container {
+  background: transparent;
+  border-bottom: 2px solid rgba(0,255,255,0.55);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-ui-theme="signal"] .chat-input-container .chat-input-main {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+[data-ui-theme="signal"] .chat-input-dock {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* Send button: matches theme — horizontal bar, not round; no pulse in standby */
+[data-ui-theme="signal"] .chat-input-container .chat-send-button {
+  width: auto;
+  min-width: 0;
+  height: auto;
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(0,255,255,0.55);
+  background: transparent;
+  color: #00ffff;
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(0,255,255,0.4);
+}
+
+[data-ui-theme="signal"] .chat-input-container .chat-send-button:hover:not(:disabled):not([data-state="stop"]) {
+  background: rgba(0,255,255,0.9);
+  color: #000;
+}
+
+[data-ui-theme="signal"] .chat-input-container .chat-send-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-ui-theme="signal"] .chat-input-container .chat-send-button[data-state="stop"] {
+  border-color: var(--ui-accent-hot, #dc2626);
+}
+
+/* SOS pulse only while sending (streaming) — re-energizes when you hit Send */
+html[data-ui-theme="signal"] body.is-streaming .chat-input-container .chat-send-button {
+  animation: transmitPulse 2.5s steps(1, end) infinite;
+}
+
+[data-ui-theme="signal"] .cockpit-header,
+[data-ui-theme="signal"] header.shrink-0 {
+  background: rgba(0, 10, 12, 0.9) !important;
+  border-bottom: 1px solid rgba(0,255,255,0.6);
+}
+
+[data-ui-theme="signal"] .convo-rail,
+[data-ui-theme="signal"] aside.shrink-0.border-r {
+  background: rgba(0, 15, 18, 0.9) !important;
+  border-right: 1px solid rgba(0,255,255,0.6);
+}
+
+[data-ui-theme="signal"] .image-modal-generate-btn,
+[data-ui-theme="signal"] .video-modal-generate-btn {
+  color: #000 !important;
 }
 
 /* ========== Light themes ========== */
@@ -720,7 +1239,7 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
 [data-ui-theme="fireice"] body {
   background: linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0c4a6e 100%);
   background-size: 200% 200%;
-  animation: ui-gradient-shift 18s ease infinite;
+  animation: ui-gradient-shift 18s var(--ease-default) infinite;
 }
 
 /* Option 9: Hacker Terminal Green (Modern) */
@@ -795,7 +1314,7 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
 }
 [data-ui-theme="radioactivelab"] .ui-btn-accent,
 [data-ui-theme="radioactivelab"] .ui-sidebar-active {
-  animation: theme-heartbeat 2s ease-in-out infinite;
+  animation: theme-heartbeat var(--duration-long) var(--ease-in-out) infinite;
 }
 
 /* Option 12: Copper Circuit (Warm Industrial) */
@@ -846,37 +1365,37 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
 [data-ui-theme="arcticneon"] body {
   background: linear-gradient(135deg, #e8f4f8 0%, #b8e6f0 50%, #e8f4f8 100%);
   background-size: 200% 200%;
-  animation: ui-gradient-shift 20s ease infinite;
+  animation: ui-gradient-shift 20s var(--ease-default) infinite;
 }
 
-/* Option 14: Sunset Gradient (Orange/Pink Dynamic) – gradient accent */
+/* Option 14: Sunset Gradient (Orange/Red Dynamic) – gradient accent */
 [data-ui-theme="sunsetgradient"] {
-  --ui-bg-main: #fff5f5;
-  --ui-bg-sidebar: #ffe0e0;
-  --ui-accent: #ff6b35;
-  --ui-accent-hot: #ff1744;
-  --ui-text-primary: #2d1b1e;
-  --ui-text-secondary: #8b4049;
-  --ui-border: #ffb3ba;
-  --ui-sidebar-active: #ffebee;
-  --ui-sidebar-hover: #ffcdd2;
+  --ui-bg-main: #fff8f2;
+  --ui-bg-sidebar: #ffead9;
+  --ui-accent: #e85c2a;
+  --ui-accent-hot: #d84315;
+  --ui-text-primary: #2d1b0e;
+  --ui-text-secondary: #8b4510;
+  --ui-border: #e89860;
+  --ui-sidebar-active: #fff0e6;
+  --ui-sidebar-hover: #ffdfc9;
   --ui-input-bg: #ffffff;
-  --ui-input-border: #ffb3ba;
-  --ui-glow: rgba(255, 107, 53, 0.3);
-  --ui-accent-gradient: linear-gradient(135deg, #ff8c42 0%, #ff6b6b 100%);
-  --atom-accent: #ff6b35;
-  --atom-accent-light: #ff6b6b;
+  --ui-input-border: #e89860;
+  --ui-glow: rgba(232, 92, 42, 0.35);
+  --ui-accent-gradient: linear-gradient(135deg, #ff8c42 0%, #e85c2a 50%, #d84315 100%);
+  --atom-accent: #e85c2a;
+  --atom-accent-light: #f57c42;
   --atom-teal: #ff8c42;
-  --atom-amber: #ff1744;
+  --atom-amber: #d84315;
 }
 [data-ui-theme="sunsetgradient"] body {
-  background: linear-gradient(180deg, #fff5f5 0%, #ffe0e0 100%);
+  background: linear-gradient(180deg, #fff8f2 0%, #ffead9 50%, #ffe0cc 100%);
   background-size: 100% 200%;
-  animation: ui-gradient-shift 25s ease infinite;
+  animation: ui-gradient-shift 25s var(--ease-default) infinite;
 }
 [data-ui-theme="sunsetgradient"] .ui-btn-accent {
   background: var(--ui-accent-gradient);
-  color: #2d1b1e;
+  color: #2d1b0e;
 }
 
 /* Option 15: Racing Stripe (Red/White/Black Speed) */
@@ -950,7 +1469,7 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
 [data-ui-theme="magmaflow"] body {
   background: linear-gradient(135deg, #1a0a00 0%, #2d1400 40%, #4d2600 70%, #1a0a00 100%);
   background-size: 200% 200%;
-  animation: ui-gradient-shift 18s ease infinite;
+  animation: ui-gradient-shift 18s var(--ease-default) infinite;
 }
 
 /* Option 18: Chrome & Glass (Ultra Modern) – glassmorphism */
@@ -1008,7 +1527,7 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   background: #000000;
 }
 [data-ui-theme="toxicwaste"] .ui-btn-accent {
-  animation: theme-heartbeat 2.2s ease-in-out infinite;
+  animation: theme-heartbeat var(--duration-long) var(--ease-in-out) infinite;
 }
 
 /* ATOM — Clinical, high-contrast dark (Unified Multimedia Gatekeeper default) */
@@ -1058,7 +1577,7 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   background: var(--ui-accent);
   color: var(--ui-bg-main);
   box-shadow: 0 4px 15px var(--ui-glow);
-  transition: all 0.15s ease;
+  transition: all var(--duration-fast) var(--ease-default);
 }
 .ui-btn-accent:hover {
   box-shadow: 0 6px 20px var(--ui-glow);
@@ -1072,7 +1591,7 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
   color: var(--ui-accent);
   border-color: var(--ui-accent);
   background: transparent;
-  transition: all 0.15s ease;
+  transition: all var(--duration-fast) var(--ease-default);
 }
 .ui-pill-suggestion:hover {
   background: var(--ui-accent);
@@ -1085,18 +1604,16 @@ html { --metrics-axis: #d4d4d4; --metrics-grid: #e5e5e5; }
 /* ========== Dynamic UI (theme/layout transitions, animations) ========== */
 /* Revert: see docs/ATOM-DYNAMIC-UI-UNDO.md */
 
-/* 400ms theme switch transition */
+/* Theme switch and layout: token durations only */
 html {
-  transition: background-color 400ms ease, color 400ms ease;
+  transition: background-color var(--duration-slower) var(--ease-default), color var(--duration-slower) var(--ease-default);
 }
 body {
-  transition: background-color 400ms ease;
+  transition: background-color var(--duration-slower) var(--ease-default);
 }
-
-/* 300ms layout/panel transitions */
 .atom-layout-transition,
 .atom-panel-wrap {
-  transition: width 300ms ease, min-width 300ms ease, grid-template-columns 300ms ease, opacity 300ms ease;
+  transition: width var(--duration-slow) var(--ease-default), min-width var(--duration-slow) var(--ease-default), grid-template-columns var(--duration-slow) var(--ease-default), opacity var(--duration-slow) var(--ease-default);
 }
 /* Arena model card when that slot is currently responding */
 .model-card-active {
@@ -1119,7 +1636,7 @@ body {
 .arena-web-tab {
   color: var(--ui-text-secondary);
   background: transparent;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
 }
 .arena-web-tab:hover:not(.active) {
   color: var(--ui-text-primary);
@@ -1134,7 +1651,7 @@ body {
 
 /* Arena globe button (web connect/disconnect) */
 .arena-globe-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.arena-globe-spin { animation: arena-globe-spin 1.2s linear infinite; }
+.arena-globe-spin { animation: arena-globe-spin var(--duration-long) linear infinite; }
 @keyframes arena-globe-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .arena-globe-dot {
   position: absolute;
@@ -1147,7 +1664,7 @@ body {
 }
 .arena-globe-dot-green { background: #22c55e; }
 .arena-globe-dot-red { background: #dc2626; }
-.arena-globe-dot-pulse { animation: arena-globe-dot-pulse 1.2s ease-in-out infinite; }
+.arena-globe-dot-pulse { animation: arena-globe-dot-pulse var(--duration-long) var(--ease-in-out) infinite; }
 @keyframes arena-globe-dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
 /* Arena control bar: sections + dividers */
@@ -1165,7 +1682,7 @@ body {
 
 /* Streaming: pulsing border glow */
 .atom-streaming-glow {
-  animation: atom-streaming-glow 1.5s ease-in-out infinite;
+  animation: atom-streaming-glow var(--duration-long) var(--ease-in-out) infinite;
 }
 @keyframes atom-streaming-glow {
   0%, 100% { box-shadow: 0 0 0 1px var(--ui-border), 0 0 12px rgba(6, 182, 212, 0.2); }
@@ -1174,7 +1691,7 @@ body {
 
 /* Response complete: brief green flash */
 .atom-complete-flash {
-  animation: atom-complete-flash 500ms ease-out forwards;
+  animation: atom-complete-flash var(--duration-slower) var(--ease-out) forwards;
 }
 @keyframes atom-complete-flash {
   0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
@@ -1184,7 +1701,7 @@ body {
 
 /* Error: red shake */
 .atom-error-shake {
-  animation: atom-error-shake 0.4s ease-in-out;
+  animation: atom-error-shake var(--duration-slow) var(--ease-in-out);
 }
 @keyframes atom-error-shake {
   0%, 100% { transform: translateX(0); }
@@ -1211,7 +1728,7 @@ body {
     var(--atom-amber) 100%
   );
   background-size: 200% 200%;
-  animation: atom-gradient-drift 15s ease-in-out infinite;
+  animation: atom-gradient-drift 15s var(--ease-in-out) infinite;
   pointer-events: none;
 }
 .atom-performance-mode .atom-gradient-bg::before {
